@@ -1,0 +1,31 @@
+Faulter/webapp architecture overview
+
+1. Frontend (Vite + React + React Flow)
+   - Entry point: `frontend/src/main.jsx` instantiates the `ReactFlowProvider`.
+   - `App.jsx` renders either the landing page or the full Flow workspace; it wires together the navigation rail (`NavBar.jsx`), the component palette (`Sidebar.jsx`), the node inspector (`NodeInspectorPanel.jsx`), the execution trace / saved records UI, the scenario manager, and the template/strategy galleries.
+   - `CustomNode.jsx` defines how each node is drawn (header colors, handles, label + displayName logic, inline parameter scrubbing, and hooks to open the inspector).
+   - Component metadata lives in `ComponentRegistry.js` (inputs/outputs/formulas/default params) plus derived template entries via `templateUtils.js`; the template registry data (`TemplateRegistry.js`) provides node/edge snapshots used when the user loads a template workflow.
+   - The workspace uses React Flow to drop nodes, manage edges, and compile the graph for execution via helpers in `GraphCompiler.js`; unconnected inputs are surfaced via `getUnconnectedInputs` and the compiled payload is zipped into the solver request.
+   - Templates and formula skeleton details are orchestrated from App; loading a template converts template nodes into actual `customNode` entries (with displayName preservation) and wires their edges, so the inspector and formulas behave as if they were hand-placed.
+   - Skeleton editor (`SkeletonEditor.jsx`) hosts its own React Flow canvas; it builds terminals, math nodes, and logic nodes for each component, reuses `ComponentRegistry` formulas/default params, and exposes `FORMULA_LIBRARY` plus derived template formulas for drag-dropping custom expressions. The editor also computes execution batches and feeds them back into the main node definition when a formula is saved.
+   - Auxiliary assets: `ScenarioManager.jsx` lets users define sweeps/faults, `ExecutionTrace.jsx` renders trace + ledger cards, and `ResultsDashboard.jsx` wraps the solved state.
+   - Data persistence: Workspaces and custom components are saved locally via `localStorage` keys (e.g., `faulter_saved_projects`, `faulter_custom_components`) and also mirrored into Supabase (`supabaseClient.js`) tables `workspaces` and `custom_components`.
+   - Client-side solving is routed to a WebWorker (`pyodideWorker.js`) that loads Pyodide. When App sends a `SOLVE` message to the worker, Pyodide executes the digital-twin numerics derived from the compiled graph, returning system state, iterations, and derived ledger entries.
+
+2. Backend (FastAPI + custom solver)
+   - FastAPI app (`backend/app/main.py`) exposes `/api/solve`, `/api/sweep`, `/api/dependency-tree`, `/api/simulate-all`, `/api/signature-library`, and custom solve endpoints. It wires in CORS to allow the frontend origin.
+   - Node definitions live in `backend/app/data/physics_equations.json`; `NodeRepository` loads the manifest and constructs `UniversalPhysicsNode` objects whose formulas reference globals plus `var('node_output')` helpers.
+   - `solver.py` contains `DAGSolver`, which topologically sorts the node graph, evaluates nodes in forward/reverse passes, logs iterations, resolves dependencies for the trace view, and exposes sweep/simulate helpers. `custom_solver.py` (plus its parallel variant) allows on-demand solving of arbitrary user-defined nodes when the workspace wants to run an ad-hoc graph.
+   - `state.py` stores the global/system state across solves; when the frontend requests a dependency tree, the solver walks producers/consumers to show formula substition with actual values.
+
+3. Database/backing store
+   - Supabase is used for long-lived persistence. Key tables: `workspaces` (payload snapshots, execution records) and `custom_components` (derived nodes saved from the inspector). Each row typically stores `id`, `name`, `payload` (JSON with nodes/edges/scenarios), execution metadata, and timestamps.
+   - LocalStorage acts as the “local-first” cache so the UI works offline; cloud sync writes to Supabase but errors are logged quietly.
+
+4. Processing layers
+   - Math compilation: `GraphCompiler.js` converts React Flow nodes/edges into a JSON payload where each node has formulas resolved via `ComponentRegistry` defaults or custom formulas provided by the user/template.
+   - Solver runtime: Once compiled, App sends the payload to Pyodide (client) or backend FastAPI depending on the execution tab. Pyodide runs the deterministic physics formulas in the worker thread, returns system state, and App stores the ledger in `executionRecords` for later viewing.
+   - Sweeps and scenarios: Scenario metadata includes sweeps (ranges, motors, faults). The backend uses these to generate Cartesian sweeps or randomized permutations. When Pyodide runs in the client, sweep runs are baked into the same worker.
+   - Template/Frozen libraries: Derived template components and their formulas automatically join the `ComponentRegistry` and skeleton editor’s library so new templates behave like built-in nodes; the helper `templateUtils.js` coordinates this mapping.
+
+Overall, the stack is: React + React Flow UI → GraphCompiler → Pyodide worker (client) or FastAPI solver (server) → Supabase/localStorage storage. Templates and formula skeletons augment the runtime by becoming first-class components in the palette and library.

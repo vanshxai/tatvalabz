@@ -1,0 +1,514 @@
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+/* ══════════════════════════════════════════════════
+   CARBON ENGINEERING DESIGN SYSTEM
+   ══════════════════════════════════════════════════ */
+
+:root {
+  /* ── Core Palette: Matte Black ── */
+  --bg-base: #09090b;
+  --bg-surface: #18181b;
+  --bg-card: #09090b;
+  --bg-elevated: #27272a;
+  --canvas-bg: #050505;
+
+  /* ── Technical Accents: Royal Blue ── */
+  --primary: #2563eb;
+  --primary-glow: rgba(37, 99, 235, 0.35);
+  --primary-dim: rgba(37, 99, 235, 0.1);
+
+  /* ── Status Colors ── */
+  --status-ok: #10b981;
+  --status-warn: #fbbf24;
+  --status-err: #ef4444;
+  --status-info: #3b82f6;
+
+  /* ── Text ── */
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+
+  /* ── Borders & Outlines ── */
+  --border-technical: rgba(255, 255, 255, 0.08);
+  --border-active: #2563eb;
+  --border-ring: rgba(37, 99, 235, 0.5);
+
+  /* ── Shadows (Tight, High Contrast) ── */
+  --shadow-node: 0 4px 6px -1px rgba(0, 0, 0, 0.7), 0 2px 4px -2px rgba(0, 0, 0, 0.7);
+  --shadow-technical: 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+/* ── Light Mode ── */
+.light-mode {
+  --bg-base: #eef2f7;
+  --bg-surface: rgba(255, 255, 255, 0.65);
+  --bg-card: rgba(255, 255, 255, 0.55);
+  --bg-elevated: rgba(240, 245, 255, 0.7);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: rgba(100, 116, 139, 0.2);
+  --border-subtle: rgba(148, 163, 184, 0.15);
+  --canvas-bg: #e8edf5;
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-bg-hover: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(100, 116, 139, 0.2);
+  --glass-border-hover: rgba(34, 211, 238, 0.3);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* ── Reset ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ══════════════════════════════════════════════════
+   NOISE TEXTURE OVERLAY — Industrial
+   ══════════════════════════════════════════════════ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* ══════════════════════════════════════════════════
+   TECHNICAL UTILITY CLASSES
+   ══════════════════════════════════════════════════ */
+.glass-panel,
+.glass-panel-heavy {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-technical);
+  box-shadow: var(--shadow-node);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.glass-hover:hover {
+  background: var(--bg-elevated);
+  border-color: var(--primary);
+}
+
+.glass-input {
+  background: #000;
+  border: 1px solid var(--border-technical);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-dim);
+  outline: none;
+}
+
+/* ══════════════════════════════════════════════════
+   INDUSTRIAL GLOW ANIMATIONS
+   ══════════════════════════════════════════════════ */
+@keyframes industrial-pulse {
+
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes scanner-line {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes glow-breathe {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.1);
+  }
+
+  50% {
+    box-shadow: 0 0 16px rgba(34, 211, 238, 0.25);
+  }
+}
+
+@keyframes border-glow {
+
+  0%,
+  100% {
+    border-color: rgba(34, 211, 238, 0.1);
+  }
+
+  50% {
+    border-color: rgba(34, 211, 238, 0.3);
+  }
+}
+
+.animate-glow-breathe {
+  animation: glow-breathe 4s ease-in-out infinite;
+}
+
+.animate-border-glow {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════
+   LIGHT MODE OVERRIDES
+   ══════════════════════════════════════════════════ */
+.light-mode .bg-gray-950 {
+  background-color: var(--bg-base) !important;
+}
+
+.light-mode .bg-gray-900 {
+  background-color: var(--bg-card) !important;
+}
+
+.light-mode .bg-gray-800 {
+  background-color: var(--bg-elevated) !important;
+}
+
+.light-mode .text-white {
+  color: var(--text-primary) !important;
+}
+
+.light-mode .text-gray-400 {
+  color: var(--text-secondary) !important;
+}
+
+.light-mode .text-gray-500 {
+  color: var(--text-muted) !important;
+}
+
+.light-mode .text-gray-600 {
+  color: var(--text-muted) !important;
+}
+
+.light-mode .border-gray-700 {
+  border-color: var(--border-color) !important;
+}
+
+.light-mode .border-gray-800 {
+  border-color: var(--border-subtle) !important;
+}
+
+.light-mode .hover\:bg-gray-800:hover {
+  background-color: var(--bg-elevated) !important;
+}
+
+.light-mode .hover\:bg-gray-600:hover {
+  background-color: rgba(203, 213, 225, 0.5) !important;
+}
+
+.light-mode .bg-gray-700 {
+  background-color: rgba(203, 213, 225, 0.5) !important;
+}
+
+.light-mode ::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+.light-mode ::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+}
+
+.light-mode .react-flow__controls button {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+  fill: var(--text-secondary) !important;
+}
+
+.light-mode .react-flow__background {
+  background: var(--canvas-bg) !important;
+}
+
+/* ══════════════════════════════════════════════════
+   REACT FLOW OVERRIDES — Technical Carbon
+   ══════════════════════════════════════════════════ */
+.react-flow__edge-path {
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  transition: stroke 0.3s, stroke-width 0.3s;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--primary);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 8px var(--primary-glow));
+}
+
+.react-flow__controls {
+  border-radius: 4px !important;
+  border: 1px solid var(--border-technical) !important;
+  box-shadow: var(--shadow-node) !important;
+  background: var(--bg-surface) !important;
+}
+
+.react-flow__controls button {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-technical) !important;
+  color: var(--text-secondary) !important;
+  fill: var(--text-secondary) !important;
+}
+
+.react-flow__controls button:hover {
+  background: var(--bg-elevated) !important;
+  color: var(--primary) !important;
+  fill: var(--primary) !important;
+}
+
+.react-flow__minimap {
+  border-radius: 4px !important;
+  border: 1px solid var(--border-technical) !important;
+  box-shadow: var(--shadow-node) !important;
+  background: var(--bg-base) !important;
+}
+
+/* ══════════════════════════════════════════════════
+   SCROLLBAR — Industrial Slim
+   ══════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::webkit-scrollbar-thumb {
+  background: var(--border-technical);
+  border-radius: 0;
+}
+
+::webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ══════════════════════════════════════════════════
+   EDGE DELETE BUTTON — Glass
+   ══════════════════════════════════════════════════ */
+.edge-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+.react-flow__edge:hover .edge-delete-btn,
+.edge-delete-btn:hover {
+  opacity: 1;
+}
+
+.edge-delete-btn button {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(14, 20, 35, 0.8);
+  backdrop-filter: blur(8px);
+  border: 2px solid var(--accent-red);
+  color: var(--accent-red);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5), 0 0 8px rgba(239, 68, 68, 0.2);
+}
+
+.edge-delete-btn button:hover {
+  background: var(--accent-red);
+  color: #fff;
+  transform: scale(1.3);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+/* ══════════════════════════════════════════════════
+   TECHNICAL ANIMATIONS
+   ══════════════════════════════════════════════════ */
+@keyframes data-bead {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes scan-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--primary-glow);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+.indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.indicator-dot-online {
+  background: var(--status-ok);
+  box-shadow: 0 0 8px var(--status-ok);
+}
+
+.indicator-dot-warning {
+  background: var(--status-warn);
+  box-shadow: 0 0 8px var(--status-warn);
+}
+
+/* ══════════════════════════════════════════════════
+   SELECTION HIGHLIGHT
+   ══════════════════════════════════════════════════ */
+::selection {
+  background: var(--primary-glow);
+  color: #fff;
+}
+
+@keyframes slideUp {
+  0% {
+    transform: translate(-50%, 40px);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUpPanel {
+  0% {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   SKELETON EDITOR STYLES
+   ══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════
+   FLOATING NAV MENU ANIMATION
+   ══════════════════════════════════════════════════ */
+@keyframes navMenuSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+.floating-nav-toggle:hover {
+  transform: scale(1.06);
+}
+
+.floating-nav-toggle:active {
+  transform: scale(0.95);
+}
+
+/* ══════════════════════════════════════════════════
+   RESPONSIVE / TABLET ADJUSTMENTS
+   ══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .floating-nav-container {
+    top: 8px !important;
+    left: 8px !important;
+  }
+
+  .action-icon-btn {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 14px !important;
+  }
+}
+
+.skeleton-editor-theme .react-flow__pane {
+  cursor: crosshair;
+}
+
+.skeleton-editor-theme .react-flow__edge-path {
+  stroke: #a78bfa;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.4));
+}
+
+.skeleton-editor-theme .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(10, 16, 28, 0.9);
+}

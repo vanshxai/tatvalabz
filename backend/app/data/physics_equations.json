@@ -1,0 +1,1055 @@
+{
+  "name": "Nassenger 8 Universal Graph Logic",
+  "defaults": {
+    "global_inputs": {
+      "line_speed": 110.0,
+      "target_rpm": 360.0,
+      "heater_power": 210.0,
+      "Tension": 0.0
+    }
+  },
+  "nodes": [
+    {
+      "id": "line_feed",
+      "title": "Line Feed",
+      "category": "Inputs",
+      "inputs": [
+        "line_speed"
+      ],
+      "outputs": [
+        "web_speed"
+      ],
+      "formulas": {
+        "web_speed": "max(0, line_speed - (var('$V_feed__drag') * 5.0))"
+      },
+      "variables": {
+        "$V_feed__drag": {
+          "label": "Feed Drag",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "printhead",
+      "title": "Printhead Thermal",
+      "category": "Thermal",
+      "inputs": [
+        "heater_power"
+      ],
+      "outputs": [
+        "head_temp"
+      ],
+      "formulas": {
+        "head_temp": "max(20, 26 + (heater_power * 0.5) - (var('$V_head__loss') * 68.0))"
+      },
+      "variables": {
+        "$V_head__loss": {
+          "label": "Heater Loss",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_01",
+      "title": "Motor 01",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_01__friction') * 3.1) + (var('$V_01__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_01__friction') * 0.42) - (var('$V_01__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_01__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_01__friction": {
+          "label": "Motor 01 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_01__tension": {
+          "label": "Motor 01 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_02",
+      "title": "Motor 02",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_02__friction') * 3.1) + (var('$V_02__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_02__friction') * 0.42) - (var('$V_02__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_02__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_02__friction": {
+          "label": "Motor 02 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_02__tension": {
+          "label": "Motor 02 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_03",
+      "title": "Motor 03",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_03__friction') * 3.1) + (var('$V_03__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_03__friction') * 0.42) - (var('$V_03__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_03__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_03__friction": {
+          "label": "Motor 03 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_03__tension": {
+          "label": "Motor 03 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_04",
+      "title": "Motor 04",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_04__friction') * 3.1) + (var('$V_04__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_04__friction') * 0.42) - (var('$V_04__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_04__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_04__friction": {
+          "label": "Motor 04 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_04__tension": {
+          "label": "Motor 04 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_05",
+      "title": "Motor 05",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_05__friction') * 3.1) + (var('$V_05__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_05__friction') * 0.42) - (var('$V_05__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_05__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_05__friction": {
+          "label": "Motor 05 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_05__tension": {
+          "label": "Motor 05 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_06",
+      "title": "Motor 06",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_06__friction') * 3.1) + (var('$V_06__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_06__friction') * 0.42) - (var('$V_06__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_06__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_06__friction": {
+          "label": "Motor 06 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_06__tension": {
+          "label": "Motor 06 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_07",
+      "title": "Motor 07",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_07__friction') * 3.1) + (var('$V_07__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_07__friction') * 0.42) - (var('$V_07__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_07__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_07__friction": {
+          "label": "Motor 07 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_07__tension": {
+          "label": "Motor 07 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_08",
+      "title": "Motor 08",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_08__friction') * 3.1) + (var('$V_08__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_08__friction') * 0.42) - (var('$V_08__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_08__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_08__friction": {
+          "label": "Motor 08 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_08__tension": {
+          "label": "Motor 08 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_09",
+      "title": "Motor 09",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_09__friction') * 3.1) + (var('$V_09__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_09__friction') * 0.42) - (var('$V_09__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_09__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_09__friction": {
+          "label": "Motor 09 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_09__tension": {
+          "label": "Motor 09 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_10",
+      "title": "Motor 10",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_10__friction') * 3.1) + (var('$V_10__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_10__friction') * 0.42) - (var('$V_10__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_10__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_10__friction": {
+          "label": "Motor 10 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_10__tension": {
+          "label": "Motor 10 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_11",
+      "title": "Motor 11",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_11__friction') * 3.1) + (var('$V_11__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_11__friction') * 0.42) - (var('$V_11__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_11__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_11__friction": {
+          "label": "Motor 11 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_11__tension": {
+          "label": "Motor 11 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_12",
+      "title": "Motor 12",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_12__friction') * 3.1) + (var('$V_12__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_12__friction') * 0.42) - (var('$V_12__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_12__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_12__friction": {
+          "label": "Motor 12 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_12__tension": {
+          "label": "Motor 12 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_13",
+      "title": "Motor 13",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_13__friction') * 3.1) + (var('$V_13__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_13__friction') * 0.42) - (var('$V_13__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_13__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_13__friction": {
+          "label": "Motor 13 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_13__tension": {
+          "label": "Motor 13 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_14",
+      "title": "Motor 14",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_14__friction') * 3.1) + (var('$V_14__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_14__friction') * 0.42) - (var('$V_14__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_14__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_14__friction": {
+          "label": "Motor 14 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_14__tension": {
+          "label": "Motor 14 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_15",
+      "title": "Motor 15",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_15__friction') * 3.1) + (var('$V_15__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_15__friction') * 0.42) - (var('$V_15__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_15__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_15__friction": {
+          "label": "Motor 15 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_15__tension": {
+          "label": "Motor 15 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_16",
+      "title": "Motor 16",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_16__friction') * 3.1) + (var('$V_16__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_16__friction') * 0.42) - (var('$V_16__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_16__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_16__friction": {
+          "label": "Motor 16 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_16__tension": {
+          "label": "Motor 16 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_17",
+      "title": "Motor 17",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_17__friction') * 3.1) + (var('$V_17__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_17__friction') * 0.42) - (var('$V_17__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_17__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_17__friction": {
+          "label": "Motor 17 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_17__tension": {
+          "label": "Motor 17 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "motor_18",
+      "title": "Motor 18",
+      "category": "Drive",
+      "inputs": [
+        "target_rpm",
+        "web_speed",
+        "Tension"
+      ],
+      "outputs": [
+        "i",
+        "Te",
+        "omega"
+      ],
+      "formulas": {
+        "i": "max(0, 1.4 + (target_rpm / 420.0) + (web_speed / 260.0) + (Tension / 85.0) + (var('$V_18__friction') * 3.1) + (var('$V_18__tension') * 1.9) + (var('Te') * 0.08))",
+        "Te": "max(0, (0.48 * i) - (Tension * 0.015) - (var('$V_18__friction') * 0.42) - (var('$V_18__tension') * 0.18))",
+        "omega": "max(0, target_rpm + (web_speed * 1.25) + (Te * 52.0) - (Tension * 1.35) - (var('$V_18__tension') * 130.0))"
+      },
+      "variables": {
+        "$V_18__friction": {
+          "label": "Motor 18 Friction",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        },
+        "$V_18__tension": {
+          "label": "Motor 18 Tension",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "web_tension",
+      "title": "Web Tension",
+      "category": "Load",
+      "inputs": [
+        "motor_01__i",
+        "motor_02__i",
+        "motor_03__i",
+        "motor_04__i",
+        "motor_05__i",
+        "motor_06__i",
+        "motor_07__i",
+        "motor_08__i",
+        "motor_09__i",
+        "motor_10__i",
+        "motor_11__i",
+        "motor_12__i",
+        "motor_13__i",
+        "motor_14__i",
+        "motor_15__i",
+        "motor_16__i",
+        "motor_17__i",
+        "motor_18__i"
+      ],
+      "outputs": [
+        "Tension"
+      ],
+      "formulas": {
+        "Tension": "max(0, ((motor_01__i + motor_02__i + motor_03__i + motor_04__i + motor_05__i + motor_06__i + motor_07__i + motor_08__i + motor_09__i + motor_10__i + motor_11__i + motor_12__i + motor_13__i + motor_14__i + motor_15__i + motor_16__i + motor_17__i + motor_18__i) / 18.0) * 7.2 + (var('$V_web__spike') * 36.0))"
+      },
+      "variables": {
+        "$V_web__spike": {
+          "label": "Web Tension Spike",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    },
+    {
+      "id": "aggregate",
+      "title": "Drive Aggregate",
+      "category": "Derived",
+      "inputs": [
+        "motor_01__i",
+        "motor_02__i",
+        "motor_03__i",
+        "motor_04__i",
+        "motor_05__i",
+        "motor_06__i",
+        "motor_07__i",
+        "motor_08__i",
+        "motor_09__i",
+        "motor_10__i",
+        "motor_11__i",
+        "motor_12__i",
+        "motor_13__i",
+        "motor_14__i",
+        "motor_15__i",
+        "motor_16__i",
+        "motor_17__i",
+        "motor_18__i",
+        "motor_01__omega",
+        "motor_02__omega",
+        "motor_03__omega",
+        "motor_04__omega",
+        "motor_05__omega",
+        "motor_06__omega",
+        "motor_07__omega",
+        "motor_08__omega",
+        "motor_09__omega",
+        "motor_10__omega",
+        "motor_11__omega",
+        "motor_12__omega",
+        "motor_13__omega",
+        "motor_14__omega",
+        "motor_15__omega",
+        "motor_16__omega",
+        "motor_17__omega",
+        "motor_18__omega",
+        "head_temp"
+      ],
+      "outputs": [
+        "motor_RPM",
+        "live_current",
+        "machine_health"
+      ],
+      "formulas": {
+        "motor_RPM": "(motor_01__omega + motor_02__omega + motor_03__omega + motor_04__omega + motor_05__omega + motor_06__omega + motor_07__omega + motor_08__omega + motor_09__omega + motor_10__omega + motor_11__omega + motor_12__omega + motor_13__omega + motor_14__omega + motor_15__omega + motor_16__omega + motor_17__omega + motor_18__omega) / 18.0",
+        "live_current": "(motor_01__i + motor_02__i + motor_03__i + motor_04__i + motor_05__i + motor_06__i + motor_07__i + motor_08__i + motor_09__i + motor_10__i + motor_11__i + motor_12__i + motor_13__i + motor_14__i + motor_15__i + motor_16__i + motor_17__i + motor_18__i) / 18.0",
+        "machine_health": "max(0, 100 - (live_current * 7.0) - max(0, (head_temp - 210) * 0.25))"
+      },
+      "variables": {}
+    },
+    {
+      "id": "signature",
+      "title": "Signature Synthesizer",
+      "category": "Diagnostics",
+      "inputs": [
+        "live_current"
+      ],
+      "outputs": [
+        "signature_current"
+      ],
+      "formulas": {
+        "signature_current": "live_current + (var('$V_sig__noise') * 1.6)"
+      },
+      "variables": {
+        "$V_sig__noise": {
+          "label": "Sensor Noise",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "default": 0
+        }
+      }
+    }
+  ],
+  "edges": [
+    [
+      "line_feed",
+      "motor_01"
+    ],
+    [
+      "motor_01",
+      "web_tension"
+    ],
+    [
+      "motor_01",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_02"
+    ],
+    [
+      "motor_02",
+      "web_tension"
+    ],
+    [
+      "motor_02",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_03"
+    ],
+    [
+      "motor_03",
+      "web_tension"
+    ],
+    [
+      "motor_03",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_04"
+    ],
+    [
+      "motor_04",
+      "web_tension"
+    ],
+    [
+      "motor_04",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_05"
+    ],
+    [
+      "motor_05",
+      "web_tension"
+    ],
+    [
+      "motor_05",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_06"
+    ],
+    [
+      "motor_06",
+      "web_tension"
+    ],
+    [
+      "motor_06",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_07"
+    ],
+    [
+      "motor_07",
+      "web_tension"
+    ],
+    [
+      "motor_07",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_08"
+    ],
+    [
+      "motor_08",
+      "web_tension"
+    ],
+    [
+      "motor_08",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_09"
+    ],
+    [
+      "motor_09",
+      "web_tension"
+    ],
+    [
+      "motor_09",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_10"
+    ],
+    [
+      "motor_10",
+      "web_tension"
+    ],
+    [
+      "motor_10",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_11"
+    ],
+    [
+      "motor_11",
+      "web_tension"
+    ],
+    [
+      "motor_11",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_12"
+    ],
+    [
+      "motor_12",
+      "web_tension"
+    ],
+    [
+      "motor_12",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_13"
+    ],
+    [
+      "motor_13",
+      "web_tension"
+    ],
+    [
+      "motor_13",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_14"
+    ],
+    [
+      "motor_14",
+      "web_tension"
+    ],
+    [
+      "motor_14",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_15"
+    ],
+    [
+      "motor_15",
+      "web_tension"
+    ],
+    [
+      "motor_15",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_16"
+    ],
+    [
+      "motor_16",
+      "web_tension"
+    ],
+    [
+      "motor_16",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_17"
+    ],
+    [
+      "motor_17",
+      "web_tension"
+    ],
+    [
+      "motor_17",
+      "aggregate"
+    ],
+    [
+      "line_feed",
+      "motor_18"
+    ],
+    [
+      "motor_18",
+      "web_tension"
+    ],
+    [
+      "motor_18",
+      "aggregate"
+    ],
+    [
+      "web_tension",
+      "aggregate"
+    ],
+    [
+      "printhead",
+      "aggregate"
+    ],
+    [
+      "aggregate",
+      "signature"
+    ]
+  ]
+}
