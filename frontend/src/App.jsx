@@ -84,6 +84,22 @@ const glassButtonBase = {
   letterSpacing: '0.05em',
 };
 
+const topActionBtnBase = {
+  height: '24px',
+  borderRadius: '4px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+  cursor: 'pointer',
+  transition: 'all 0.1s ease',
+  fontSize: '9px',
+  fontWeight: 900,
+  padding: '0 10px',
+  letterSpacing: '0.08em',
+  fontFamily: "var(--font-body)",
+};
+
 const makeNodeInputKey = (nodeId, inputName) => `${nodeId}::${inputName}`;
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -145,8 +161,9 @@ function Flow() {
   const [compiledJson, setCompiledJson] = useState(null);
   const [backendResult, setBackendResult] = useState(null);
   const [showPanel, setShowPanel] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [activeTab, setActiveTab] = useState("inputs");
+  const [showLibraryPanel, setShowLibraryPanel] = useState(false);
+  const [activeTab, setActiveTab] = useState("simulation");
+  const [resultsTab, setResultsTab] = useState("inputs");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [leafInputs, setLeafInputs] = useState([]);
@@ -155,7 +172,6 @@ function Flow() {
 
   // ── Simulation Orchestrator State ──
   const [scenarios, setScenarios] = useState([]);
-  const [showScenarioManager, setShowScenarioManager] = useState(false);
   const [activeScenarioId, setActiveScenarioId] = useState(null);
   const [activeSection, setActiveSection] = useState("workspace");
   const [activeSkeletonNodeId, setActiveSkeletonNodeId] = useState(null);
@@ -176,6 +192,8 @@ function Flow() {
   const [projectSearch, setProjectSearch] = useState('');
   const [showQuickProfileMenu, setShowQuickProfileMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [hoverOpenedPanel, setHoverOpenedPanel] = useState(null);
+  const [isCsvExporting, setIsCsvExporting] = useState(false);
   const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [executionRecords, setExecutionRecords] = useState([]);
   const [activeCalculationPreview, setActiveCalculationPreview] = useState(null);
@@ -187,6 +205,9 @@ function Flow() {
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pyodideStatus, setPyodideStatus] = useState('Initializing...');
   const solveResolverRef = useRef(null);
+  const hoverPanelCloseTimeoutRef = useRef(null);
+  const exportMenuCloseTimeoutRef = useRef(null);
+  const quickProfileMenuCloseTimeoutRef = useRef(null);
 
   // Persistent Sequence Counter for dropping nodes
   const nodeSequenceCount = useRef(0);
@@ -219,6 +240,70 @@ function Flow() {
       document.removeEventListener("touchstart", handleOutside);
     };
   }, [showQuickProfileMenu, showExportMenu]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverPanelCloseTimeoutRef.current) {
+        clearTimeout(hoverPanelCloseTimeoutRef.current);
+        hoverPanelCloseTimeoutRef.current = null;
+      }
+      if (exportMenuCloseTimeoutRef.current) {
+        clearTimeout(exportMenuCloseTimeoutRef.current);
+        exportMenuCloseTimeoutRef.current = null;
+      }
+      if (quickProfileMenuCloseTimeoutRef.current) {
+        clearTimeout(quickProfileMenuCloseTimeoutRef.current);
+        quickProfileMenuCloseTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const cancelExportMenuClose = useCallback(() => {
+    if (exportMenuCloseTimeoutRef.current) {
+      clearTimeout(exportMenuCloseTimeoutRef.current);
+      exportMenuCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleExportMenuClose = useCallback(() => {
+    cancelExportMenuClose();
+    exportMenuCloseTimeoutRef.current = setTimeout(() => {
+      setShowExportMenu(false);
+      exportMenuCloseTimeoutRef.current = null;
+    }, 220);
+  }, [cancelExportMenuClose]);
+
+  const cancelQuickProfileMenuClose = useCallback(() => {
+    if (quickProfileMenuCloseTimeoutRef.current) {
+      clearTimeout(quickProfileMenuCloseTimeoutRef.current);
+      quickProfileMenuCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleQuickProfileMenuClose = useCallback(() => {
+    cancelQuickProfileMenuClose();
+    quickProfileMenuCloseTimeoutRef.current = setTimeout(() => {
+      setShowQuickProfileMenu(false);
+      quickProfileMenuCloseTimeoutRef.current = null;
+    }, 220);
+  }, [cancelQuickProfileMenuClose]);
+
+  const scheduleHoverPanelClose = useCallback(() => {
+    if (hoverPanelCloseTimeoutRef.current) clearTimeout(hoverPanelCloseTimeoutRef.current);
+    hoverPanelCloseTimeoutRef.current = setTimeout(() => {
+      if (hoverOpenedPanel === "simulation") setShowPanel(false);
+      if (hoverOpenedPanel === "library") setShowLibraryPanel(false);
+      setHoverOpenedPanel(null);
+      hoverPanelCloseTimeoutRef.current = null;
+    }, 120);
+  }, [hoverOpenedPanel]);
+
+  const cancelHoverPanelClose = useCallback(() => {
+    if (hoverPanelCloseTimeoutRef.current) {
+      clearTimeout(hoverPanelCloseTimeoutRef.current);
+      hoverPanelCloseTimeoutRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -400,8 +485,17 @@ function Flow() {
       setCurrentProjectName(draft.currentProjectName || null);
       if (typeof draft.selectedTemplateId === "string") setSelectedTemplateId(draft.selectedTemplateId);
       if (typeof draft.activeSection === "string") setActiveSection(draft.activeSection);
-      if (typeof draft.activeTab === "string") setActiveTab(draft.activeTab);
+      if (typeof draft.activeTab === "string") {
+        if (draft.activeTab === "inputs" || draft.activeTab === "compiled" || draft.activeTab === "solver") {
+          setActiveTab("results");
+          setResultsTab(draft.activeTab);
+        } else {
+          setActiveTab(draft.activeTab === "library" ? "simulation" : draft.activeTab);
+        }
+      }
+      if (typeof draft.resultsTab === "string") setResultsTab(draft.resultsTab);
       if (typeof draft.showPanel === "boolean") setShowPanel(draft.showPanel);
+      if (typeof draft.showLibraryPanel === "boolean") setShowLibraryPanel(draft.showLibraryPanel);
 
       const restoredUnconnected = getUnconnectedInputs(draftNodes, draftEdges);
       setLeafInputs(restoredUnconnected);
@@ -437,7 +531,9 @@ function Flow() {
         activeSection,
         selectedTemplateId,
         activeTab,
+        resultsTab,
         showPanel,
+        showLibraryPanel,
         updatedAt: new Date().toISOString(),
       };
       localStorage.setItem(WORKSPACE_DRAFT_KEY, JSON.stringify(draft));
@@ -458,19 +554,10 @@ function Flow() {
     activeSection,
     selectedTemplateId,
     activeTab,
+    resultsTab,
     showPanel,
+    showLibraryPanel,
   ]);
-
-  // ── Warn user before browser refresh/close if unsaved graph changes exist ──
-  useEffect(() => {
-    const handleBeforeUnload = (event) => {
-      if (!hasPotentialDataLoss()) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasPotentialDataLoss]);
 
   // ── Initial Cloud Load ──
   useEffect(() => {
@@ -751,21 +838,19 @@ function Flow() {
     return true;
   };
 
-  const confirmProceedWithPotentialDataLoss = useCallback(async (nextActionLabel = "continue") => {
+  const confirmProceedWithPotentialDataLoss = useCallback(async () => {
     if (!hasPotentialDataLoss()) return true;
-    const shouldSave = await customConfirm(
-      "Unsaved Workflow",
-      `You have unsaved workflow changes.\n\nYes = Save before ${nextActionLabel}\nNo = Continue without saving`
-    );
-    if (shouldSave) {
+    if (currentProjectId) {
       const saved = await handleSaveProject();
       if (!saved) return false;
+      showToast("Autosaved before switching.", "success");
     }
+    // For unnamed drafts, continue without modal and keep draft persistence in localStorage.
     return true;
-  }, [hasPotentialDataLoss, handleSaveProject]);
+  }, [hasPotentialDataLoss, currentProjectId, handleSaveProject]);
 
   const handleLoadProject = async (project) => {
-    const canProceed = await confirmProceedWithPotentialDataLoss(`loading "${project?.name || "this project"}"`);
+    const canProceed = await confirmProceedWithPotentialDataLoss();
     if (!canProceed) return;
 
     const loadedNodes = structuredClone(project.nodes || []);
@@ -801,7 +886,9 @@ function Flow() {
     if (project.backendResult) {
       setBackendResult(structuredClone(project.backendResult));
       setShowPanel(true);
-      setActiveTab("solver");
+      setShowLibraryPanel(false);
+      setActiveTab("results");
+      setResultsTab("solver");
     } else {
       setBackendResult(null);
       setShowPanel(false);
@@ -824,27 +911,11 @@ function Flow() {
       return;
     }
 
-    if (hasUnsavedChanges()) {
-      if (currentProjectId) {
-        // Already-saved project with new changes → ask to update
-        const choice = await customConfirm(
-          'Unsaved Changes',
-          `"${currentProjectName}" has unsaved changes.\n\nYes = Save changes before clearing\nNo = Discard changes`
-        );
-        if (choice) await handleSaveProject(); // silently updates in-place
-      } else {
-        // Brand-new unsaved workflow
-        const choice = await customConfirm(
-          'Unsaved Changes',
-          'You have unsaved changes.\n\nYes = Save before starting new\nNo = Discard changes'
-        );
-        if (choice) {
-          const saved = await handleSaveProject();
-          if (!saved) return; // User cancelled the name prompt → abort
-        }
-      }
+    if (hasUnsavedChanges() && currentProjectId) {
+      await handleSaveProject();
+      showToast("Autosaved before starting a new workflow.", "success");
     }
-    // else: no unsaved changes (e.g. loaded project, didn't touch it) → just clear
+    // Unnamed draft changes are discarded silently when starting a new workflow.
 
     // Clear the canvas
     setNodes([]);
@@ -870,18 +941,15 @@ function Flow() {
     // Guard for workspace -> saved-like navigation when current graph has unsaved work.
     const isSavedLikeTarget = nextSection === "saved" || nextSection === "saved_calculations";
     if (activeSection === "workspace" && isSavedLikeTarget && (nodes.length > 0 || edges.length > 0) && hasUnsavedChanges()) {
-      const shouldSave = await customConfirm(
-        "Save Current Workflow?",
-        'You have unsaved changes.\n\nYes = Save before opening Saved Projects\nNo = Continue without saving'
-      );
-      if (shouldSave) {
+      if (currentProjectId) {
         const saved = await handleSaveProject();
         if (!saved) return;
+        showToast("Autosaved before opening Saved Projects.", "success");
       }
     }
 
     setActiveSection(nextSection);
-  }, [activeSection, nodes.length, edges.length, hasUnsavedChanges, handleSaveProject]);
+  }, [activeSection, nodes.length, edges.length, hasUnsavedChanges, currentProjectId, handleSaveProject]);
 
   const handleDeleteProject = async (projectId, projectName) => {
     const confirmed = await customConfirm('Delete Project', `Delete "${projectName}"? This cannot be undone.`);
@@ -1024,282 +1092,8 @@ function Flow() {
   }, []);
 
   const handleExportCsv = useCallback(async () => {
-    const rows = [["section", "group", "metric", "value"]];
+    if (isPdfExporting || isCsvExporting) return;
     const timestampIso = new Date().toISOString();
-    const addRow = (section, group, metric, value) => {
-      rows.push([section, group, metric, value ?? ""]);
-    };
-    const scrubNodeIds = (raw) => String(raw ?? "").replace(/\bnode[_\s-]*\d+\b/gi, "Component");
-    const prettyLabel = (raw) =>
-      scrubNodeIds(String(raw || ""))
-        .replace(/[_-]+/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .replace(/\b\w/g, (m) => m.toUpperCase());
-    const toPrecise = (value) => {
-      if (value === undefined) return "undefined";
-      if (value === null) return "null";
-      if (typeof value === "number") {
-        if (Number.isNaN(value)) return "NaN";
-        if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
-        return Number(value).toPrecision(17);
-      }
-      if (typeof value === "string") return value;
-      try {
-        return JSON.stringify(value);
-      } catch {
-        return String(value);
-      }
-    };
-    const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    const compiledNodes = Array.isArray(compiledJson?.nodes) ? compiledJson.nodes : [];
-    const nodeById = new Map(compiledNodes.map((node) => [node.id, node]));
-    const uiNodeById = new Map(nodes.map((node) => [node.id, node]));
-
-    if (compiledNodes.length === 0) {
-      nodes.forEach((node) => {
-        nodeById.set(node.id, {
-          id: node.id,
-          label: node?.data?.label || node?.data?.name || "Unnamed Component",
-          formulas: node?.data?.formulas || {},
-          inputs_mapped: node?.data?.inputs_mapped || {},
-          execution_layer: 0,
-        });
-      });
-    }
-
-    const sortedNodeIds = [...new Set([...nodeById.keys()])].sort((a, b) => b.length - a.length);
-
-    const getNodeName = (nodeId) => {
-      const compiled = nodeById.get(nodeId);
-      const ui = uiNodeById.get(nodeId);
-      const rawLabel =
-        compiled?.label ||
-        compiled?.name ||
-        ui?.data?.label ||
-        ui?.data?.name ||
-        "Unnamed Component";
-      return prettyLabel(rawLabel);
-    };
-
-    const getNodeDescription = (nodeId, nodeObj = null) => {
-      const uiNode = uiNodeById.get(nodeId);
-      const candidates = [
-        nodeObj?.description,
-        nodeObj?.desc,
-        uiNode?.data?.description,
-        uiNode?.data?.desc,
-        uiNode?.data?.notes,
-        uiNode?.data?.summary,
-      ];
-      const found = candidates.find((item) => typeof item === "string" && item.trim());
-      return found ? found.trim() : "";
-    };
-
-    const parseSourceRef = (sourceRef) => {
-      if (!sourceRef) return null;
-      for (const nodeId of sortedNodeIds) {
-        const prefix = `${nodeId}_`;
-        if (sourceRef.startsWith(prefix)) {
-          return { nodeId, outputName: sourceRef.slice(prefix.length) };
-        }
-      }
-      return null;
-    };
-
-    const prettySource = (source) => {
-      if (!source) return "Unresolved fallback";
-      if (source.startsWith("mapped:")) {
-        const right = source.replace("mapped:", "");
-        const [nodeId, output] = right.split(".");
-        return `Mapped from ${getNodeName(nodeId)} -> ${prettyLabel(output)}`;
-      }
-      if (source.startsWith("global:")) return `Global constant (${prettyLabel(source.replace("global:", ""))})`;
-      if (source.startsWith("local:")) {
-        const right = source.replace("local:", "");
-        const [nodeId, outputName] = right.split(".");
-        return `Local output (${getNodeName(nodeId)} -> ${prettyLabel(outputName)})`;
-      }
-      if (source.startsWith("scoped:")) {
-        const right = source.replace("scoped:", "");
-        const [nodeId, outputName] = right.includes("__") ? right.split("__") : right.split("_");
-        if (nodeId) return `Scoped value (${getNodeName(nodeId)} -> ${prettyLabel(outputName)})`;
-        return `Scoped system value (${prettyLabel(right)})`;
-      }
-      return prettyLabel(source);
-    };
-
-    const layerToNodeIds = new Map();
-    if (Array.isArray(compiledJson?.execution_batches) && compiledJson.execution_batches.length > 0) {
-      compiledJson.execution_batches.forEach((batch) => {
-        const layer = Number(batch.layer ?? 0);
-        const ids = Array.isArray(batch.node_ids) ? batch.node_ids : [];
-        if (!layerToNodeIds.has(layer)) layerToNodeIds.set(layer, []);
-        layerToNodeIds.get(layer).push(...ids);
-      });
-    } else if (compiledNodes.length > 0) {
-      compiledNodes.forEach((node) => {
-        const layer = Number(node.execution_layer ?? 0);
-        if (!layerToNodeIds.has(layer)) layerToNodeIds.set(layer, []);
-        layerToNodeIds.get(layer).push(node.id);
-      });
-    } else if (nodes.length > 0) {
-      layerToNodeIds.set(0, nodes.map((n) => n.id));
-    }
-    const nodeLayerById = new Map();
-    [...layerToNodeIds.keys()].sort((a, b) => a - b).forEach((layer) => {
-      Array.from(new Set(layerToNodeIds.get(layer) || [])).forEach((nodeId) => {
-        nodeLayerById.set(nodeId, layer);
-      });
-    });
-    const getLayer = (nodeId) => nodeLayerById.get(nodeId) ?? 0;
-
-    const humanizeSystemField = (key) => {
-      let value = String(key || "");
-      sortedNodeIds.forEach((nodeId) => {
-        const rx = new RegExp(`\\b${escapeRegExp(nodeId)}\\b`, "g");
-        value = value.replace(rx, getNodeName(nodeId));
-      });
-      return prettyLabel(value);
-    };
-
-    addRow("meta", "Workflow", "Project Name", currentProjectName || "Untitled workflow");
-    addRow("meta", "Workflow", "Exported At", timestampIso);
-    addRow("meta", "Workflow", "Component Count", String(nodes.length));
-    addRow("meta", "Workflow", "Connection Count", String(edges.length));
-    addRow("meta", "Workflow", "Scenario Count", String(scenarios.length));
-    addRow("meta", "Workflow", "Execution Records", String(executionRecords.length));
-
-    nodes.forEach((node, index) => {
-      const name = getNodeName(node.id);
-      const desc = getNodeDescription(node.id, node);
-      addRow("component", `Layer ${getLayer(node.id)}`, `Component ${index + 1}`, name);
-      if (desc) addRow("component", name, "Description", desc);
-      addRow("component", name, "Type", prettyLabel(node.type || "customNode"));
-    });
-
-    edges.forEach((edge, index) => {
-      const sourceName = getNodeName(edge.source);
-      const targetName = getNodeName(edge.target);
-      addRow("connection", `Link ${index + 1}`, "From", sourceName);
-      addRow("connection", `Link ${index + 1}`, "To", targetName);
-      if (edge.sourceHandle || edge.targetHandle) {
-        addRow(
-          "connection",
-          `Link ${index + 1}`,
-          "Signal",
-          `${prettyLabel(edge.sourceHandle || "out")} -> ${prettyLabel(edge.targetHandle || "in")}`
-        );
-      }
-    });
-
-    scenarios.forEach((scenario, index) => {
-      const scenarioName = scenario.name || `Scenario ${index + 1}`;
-      addRow("scenario", scenarioName, "Active", String(Boolean(scenario.isActive)));
-      if (scenario.sweeps && Object.keys(scenario.sweeps).length > 0) {
-        const sweepSummary = Object.entries(scenario.sweeps)
-          .map(([key, value]) => `${humanizeSystemField(key)}=${toPrecise(value)}`)
-          .join(" | ");
-        addRow("scenario", scenarioName, "Sweep Config", sweepSummary || "Configured");
-      }
-    });
-
-    [...nodeById.entries()]
-      .sort((a, b) => getLayer(a[0]) - getLayer(b[0]) || getNodeName(a[0]).localeCompare(getNodeName(b[0])))
-      .forEach(([nodeId, nodeObj]) => {
-        const nodeName = getNodeName(nodeId);
-        const layer = getLayer(nodeId);
-        const formulas = Object.entries(nodeObj?.formulas || {});
-        const inputsMapped = nodeObj?.inputs_mapped || {};
-        formulas.forEach(([outputName, formula]) => {
-          addRow("formula", `${nodeName} (Layer ${layer})`, prettyLabel(outputName), String(formula || ""));
-        });
-        Object.entries(inputsMapped).forEach(([varName, sourceRef]) => {
-          const parsed = parseSourceRef(sourceRef);
-          const sourceName = parsed
-            ? prettySource(`mapped:${parsed.nodeId}.${parsed.outputName}`)
-            : humanizeSystemField(sourceRef);
-          addRow("source_map", `${nodeName} (Layer ${layer})`, prettyLabel(varName), sourceName);
-        });
-      });
-
-    const buildVariants = () => {
-      const variants = [];
-      if (backendResult?.node_outputs || backendResult?.system_state) {
-        variants.push({
-          label: "Baseline Run",
-          sweepSummary: "",
-          nodeOutputs: backendResult?.node_outputs || {},
-          systemState: backendResult?.system_state || {},
-        });
-      }
-      const scenarioResults = Array.isArray(backendResult?.scenario_results) ? backendResult.scenario_results : [];
-      scenarioResults.forEach((scenario) => {
-        const outputsList = Array.isArray(scenario?.data_points) ? scenario.data_points : [];
-        const stateList = Array.isArray(scenario?.system_states) ? scenario.system_states : [];
-        const sweepVars = Array.isArray(scenario?.sweep_variables) ? scenario.sweep_variables : [];
-        const sweepValues = Array.isArray(scenario?.sweep_values) ? scenario.sweep_values : [];
-        outputsList.forEach((nodeOutputs, idx) => {
-          const runVals = sweepValues[idx];
-          const sweepSummary = Array.isArray(runVals)
-            ? sweepVars.map((name, i) => `${prettyLabel(name)}=${toPrecise(runVals[i])}`).join(" | ")
-            : "";
-          variants.push({
-            label: `${scenario?.scenario_name || "Scenario"} - Iteration ${idx + 1}/${outputsList.length || 1}`,
-            sweepSummary,
-            nodeOutputs: nodeOutputs || {},
-            systemState: stateList[idx] || {},
-          });
-        });
-      });
-      if (!scenarioResults.length && Array.isArray(backendResult?.data_points)) {
-        const outputsList = backendResult.data_points;
-        const stateList = Array.isArray(backendResult?.system_states) ? backendResult.system_states : [];
-        outputsList.forEach((nodeOutputs, idx) => {
-          variants.push({
-            label: `Sweep Iteration ${idx + 1}/${outputsList.length || 1}`,
-            sweepSummary: "",
-            nodeOutputs: nodeOutputs || {},
-            systemState: stateList[idx] || {},
-          });
-        });
-      }
-      return variants;
-    };
-
-    const variants = buildVariants();
-    variants.forEach((variant) => {
-      addRow("run", variant.label, "Sweep Inputs", variant.sweepSummary || "-");
-
-      const nodeResultRows = [];
-      Object.entries(variant.nodeOutputs || {}).forEach(([nodeId, outputs]) => {
-        Object.entries(outputs || {}).forEach(([outputName, value]) => {
-          nodeResultRows.push({
-            layer: getLayer(nodeId),
-            nodeName: getNodeName(nodeId),
-            metric: prettyLabel(outputName),
-            value: toPrecise(value),
-          });
-        });
-      });
-      nodeResultRows
-        .sort((a, b) => a.layer - b.layer || a.nodeName.localeCompare(b.nodeName) || a.metric.localeCompare(b.metric))
-        .forEach((row) => {
-          addRow("node_result", `${variant.label} | ${row.nodeName} (Layer ${row.layer})`, row.metric, row.value);
-        });
-
-      Object.entries(variant.systemState || {})
-        .sort(([a], [b]) => a.localeCompare(b))
-        .forEach(([key, value]) => {
-          addRow("system_result", variant.label, humanizeSystemField(key), toPrecise(value));
-        });
-    });
-
-    const csv = rows
-      .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-
     const stamp = timestampIso.replace(/[:.]/g, "-");
     const suggestedName = `${getExportFileBaseName()}_${stamp}.csv`;
     const requested = await customPrompt("Export CSV", "Enter CSV file name:", suggestedName);
@@ -1309,10 +1103,59 @@ function Flow() {
     }
 
     const fileName = `${sanitizeExportName(requested, getExportFileBaseName())}.csv`;
-    downloadTextFile(csv, fileName, "text/csv;charset=utf-8;");
+    setIsCsvExporting(true);
     setShowExportMenu(false);
-    showToast(`CSV downloaded: ${fileName}`, "success");
-  }, [currentProjectName, nodes, edges, scenarios, executionRecords.length, backendResult, compiledJson, getExportFileBaseName, sanitizeExportName, downloadTextFile, showToast]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    try {
+      const rows = [["section", "key", "value"]];
+      rows.push(["meta", "project_name", currentProjectName || "Untitled workflow"]);
+      rows.push(["meta", "exported_at", timestampIso]);
+      rows.push(["meta", "node_count", String(nodes.length)]);
+      rows.push(["meta", "edge_count", String(edges.length)]);
+      rows.push(["meta", "scenario_count", String(scenarios.length)]);
+      rows.push(["meta", "execution_record_count", String(executionRecords.length)]);
+
+      nodes.forEach((node, index) => {
+        rows.push(["node", `${index + 1}.id`, node.id]);
+        rows.push(["node", `${index + 1}.label`, node?.data?.label || node.id]);
+        rows.push(["node", `${index + 1}.type`, node.type || "customNode"]);
+        rows.push(["node", `${index + 1}.x`, String(node?.position?.x ?? "")]);
+        rows.push(["node", `${index + 1}.y`, String(node?.position?.y ?? "")]);
+      });
+
+      edges.forEach((edge, index) => {
+        rows.push(["edge", `${index + 1}.id`, edge.id]);
+        rows.push(["edge", `${index + 1}.source`, edge.source]);
+        rows.push(["edge", `${index + 1}.target`, edge.target]);
+        rows.push(["edge", `${index + 1}.source_handle`, edge.sourceHandle || ""]);
+        rows.push(["edge", `${index + 1}.target_handle`, edge.targetHandle || ""]);
+      });
+
+      scenarios.forEach((scenario, index) => {
+        rows.push(["scenario", `${index + 1}.id`, scenario.id || `scenario_${index + 1}`]);
+        rows.push(["scenario", `${index + 1}.name`, scenario.name || `Scenario ${index + 1}`]);
+        rows.push(["scenario", `${index + 1}.active`, String(Boolean(scenario.isActive))]);
+        rows.push(["scenario", `${index + 1}.sweeps`, JSON.stringify(scenario.sweeps || {})]);
+      });
+
+      const systemState = backendResult?.system_state || {};
+      Object.entries(systemState).forEach(([key, value]) => {
+        rows.push(["system_state", key, String(value)]);
+      });
+
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      downloadTextFile(csv, fileName, "text/csv;charset=utf-8;");
+      showToast(`CSV downloaded: ${fileName}`, "success");
+    } catch (err) {
+      showToast(`CSV export failed: ${err?.message || err}`, "error");
+    } finally {
+      setIsCsvExporting(false);
+    }
+  }, [currentProjectName, nodes, edges, scenarios, executionRecords.length, backendResult, getExportFileBaseName, sanitizeExportName, downloadTextFile, showToast, isPdfExporting, isCsvExporting]);
 
   const handleExportPdf = useCallback(async () => {
     if (isPdfExporting) return;
@@ -1829,10 +1672,18 @@ function Flow() {
       <div class="report-wrap">
         <style>
           .report-wrap {
-            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             color: #d8e4f5;
             background: linear-gradient(180deg, #0b1118 0%, #0f1824 100%);
             padding: 18px 24px 24px;
+            line-height: 1.35;
+          }
+          .report-wrap, .report-wrap * {
+            box-sizing: border-box;
+          }
+          .report-wrap h1, .report-wrap h2, .report-wrap h3, .report-wrap h4, .report-wrap h5,
+          .report-wrap p, .report-wrap table {
+            margin: 0;
           }
           .hero {
             border: 1px solid rgba(50, 184, 255, 0.35);
@@ -1844,6 +1695,8 @@ function Flow() {
           .pdf-block {
             width: 100%;
             box-sizing: border-box;
+            display: block;
+            overflow: hidden;
             break-inside: avoid;
             page-break-inside: avoid;
           }
@@ -1899,13 +1752,13 @@ function Flow() {
             font-size: 8px;
             font-weight: 600;
             text-anchor: middle;
-            font-family: "JetBrains Mono", "Fira Code", "Consolas", "SFMono-Regular", monospace;
+            font-family: "Consolas", "Menlo", "SFMono-Regular", monospace;
           }
           .flow-node-label {
             fill: #f0f7ff;
             font-size: 8px;
             font-weight: 700;
-            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
           }
           h3 { margin: 0 0 4px 0; font-size: 12px; color: #ecf6ff; }
           h4 { margin: 0 0 7px 0; font-size: 11px; color: #9cd3ff; }
@@ -1991,7 +1844,7 @@ function Flow() {
           .tok-num { color: #ffffff; font-weight: 700; }
           .tok-op { color: #ff8a3d; font-weight: 700; }
           .tok-fn { color: #f8d180; font-weight: 700; }
-          .mono { font-family: "JetBrains Mono", "Fira Code", "Consolas", "SFMono-Regular", monospace; }
+          .mono { font-family: "Consolas", "Menlo", "SFMono-Regular", monospace; }
           .clean-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
           .clean-table th, .clean-table td {
             border: 1px solid rgba(78, 112, 148, 0.45);
@@ -2158,9 +2011,10 @@ function Flow() {
 
       let yCursor = marginY;
       drawPageBackground();
-      const blockGap = 4;
+      const blockGap = 2;
       const minRenderableSpacePt = 24;
       const layerKeepTogetherLimitPt = contentHeight * 0.82;
+      const renderScale = Math.min(2, Math.max(1.4, window.devicePixelRatio || 1));
 
       const renderCanvasSliced = (canvas) => {
         let consumedPx = 0;
@@ -2198,7 +2052,7 @@ function Flow() {
         }
 
         const blockCanvas = await html2canvas(block, {
-          scale: 2,
+          scale: renderScale,
           useCORS: true,
           backgroundColor: "#0b1118",
           logging: false,
@@ -2366,7 +2220,10 @@ function Flow() {
       if (!(key in newValues)) newValues[key] = 0;
     });
     setInputValues(newValues);
-    setShowPanel(true); setShowLibrary(false); setActiveTab("inputs");
+    setShowPanel(true);
+    setShowLibraryPanel(false);
+    setActiveTab("results");
+    setResultsTab("inputs");
   };
 
   const handleLocalSolve = async () => {
@@ -2477,7 +2334,9 @@ function Flow() {
         return next;
       });
 
-      setBackendResult(result); setActiveTab("solver");
+      setBackendResult(result);
+      setActiveTab("results");
+      setResultsTab("solver");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -2652,9 +2511,8 @@ function Flow() {
     if (!canProceed) return;
 
     setShowQuickProfileMenu(false);
-    setShowScenarioManager(false);
-    setShowLibrary(false);
     setShowPanel(false);
+    setShowLibraryPanel(false);
     setInspectedNodeId(null);
     setActiveSkeletonNodeId(null);
     setActiveSection("workspace");
@@ -2711,10 +2569,12 @@ function Flow() {
                 onClick={handleCloseWorkspace}
                 title="Return to Landing Page"
               >
-                <div className="w-8 h-8 rounded-sm outline outline-1 outline-blue-500/30 flex items-center justify-center font-bold text-lg text-blue-500 bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">🔬</div>
+                <div className="w-8 h-8 rounded-sm outline outline-1 flex items-center justify-center font-bold text-lg transition-colors"
+                  style={{ outlineColor: "var(--primary-glow)", color: "var(--primary-strong)", background: "var(--primary-dim)" }}
+                >🔬</div>
                 <div className="flex flex-col">
                   <h1 className="text-xl font-black tracking-tight flex items-baseline gap-1 m-0 text-white">
-                    Tatva<span className="text-blue-500">Labz</span> <span className="text-[10px] text-blue-500 tracking-[0.2em] font-mono">CORE</span>
+                    Tatva<span style={{ color: "var(--primary-strong)" }}>Labz</span> <span className="text-[10px] tracking-[0.2em] font-mono" style={{ color: "var(--primary-strong)" }}>CORE</span>
                   </h1>
                   <span className="text-[8px] tracking-[0.12em] uppercase" style={{ color: "#6b7fa0", fontFamily: "'JetBrains Mono', monospace" }}>
                     inspired by conciousness
@@ -2739,14 +2599,15 @@ function Flow() {
                   className="truncate"
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    color: currentProjectName ? '#c5d0dc' : '#4a5568',
+                    color: currentProjectName ? 'var(--text-secondary)' : 'var(--text-muted)',
                     fontSize: '13px', fontWeight: 500, padding: '2px 6px',
                     borderRadius: '6px', transition: 'all 0.15s',
                     maxWidth: '220px', textOverflow: 'ellipsis', overflow: 'hidden',
                     whiteSpace: 'nowrap',
+                    fontFamily: "var(--font-body)",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(100, 160, 220, 0.08)'; e.currentTarget.style.color = '#e2e8f0'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = currentProjectName ? '#c5d0dc' : '#4a5568'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary-dim)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = currentProjectName ? 'var(--text-secondary)' : 'var(--text-muted)'; }}
                 >
                   {currentProjectName || (nodes.length > 0 ? 'Untitled workflow' : 'No project')}
                 </button>
@@ -2773,8 +2634,8 @@ function Flow() {
                 style={{
                   background: 'rgba(14, 20, 35, 0.4)',
                   border: '1px solid rgba(100, 160, 220, 0.08)',
-                  color: '#6b7fa0',
-                  fontFamily: "'JetBrains Mono', monospace",
+                  color: 'var(--text-muted)',
+                  fontFamily: "var(--font-mono)",
                 }}>
                 {nodes.length}n · {edges.length}e
               </span>
@@ -2784,179 +2645,148 @@ function Flow() {
                 title="New Workflow"
                 className="action-icon-btn"
                 style={{
-                  height: '24px', borderRadius: '4px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(16, 185, 129, 0.05)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  cursor: 'pointer', transition: 'all 0.1s ease',
-                  fontSize: '9px',
-                  fontWeight: 900,
-                  padding: '0 10px',
-                  color: '#10b981',
-                  letterSpacing: '0.08em'
+                  ...topActionBtnBase,
+                  background: 'var(--primary-dim)',
+                  border: '1px solid var(--primary-glow)',
+                  color: 'var(--primary-strong)',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)'; e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.5)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.05)'; e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.3)'; }}
-              >NEW</button>
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--primary-dim)'; e.currentTarget.style.borderColor = 'var(--primary-glow)'; }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
+                NEW
+              </button>
 
               {/* Save — icon only */}
               <button onClick={handleSaveProject}
                 title="Save Project"
                 className="action-icon-btn"
                 style={{
-                  height: '24px', borderRadius: '4px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(100, 160, 220, 0.08)',
-                  border: '1px solid rgba(103, 232, 249, 0.3)',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  cursor: 'pointer', transition: 'all 0.1s ease',
-                  fontSize: '9px',
-                  fontWeight: 900,
-                  padding: '0 10px',
-                  color: '#67e8f9',
-                  letterSpacing: '0.08em'
+                  ...topActionBtnBase,
+                  background: 'var(--primary-dim)',
+                  border: '1px solid var(--primary-glow)',
+                  color: 'var(--primary-strong)',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(100, 160, 220, 0.15)'; e.currentTarget.style.borderColor = 'rgba(103, 232, 249, 0.5)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(100, 160, 220, 0.08)'; e.currentTarget.style.borderColor = 'rgba(103, 232, 249, 0.3)'; }}
-              >SAVE</button>
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--primary-dim)'; e.currentTarget.style.borderColor = 'var(--primary-glow)'; }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v4h8" /></svg>
+                SAVE
+              </button>
 
-              {/* Scenarios — icon only */}
+              {/* Simulate */}
               <button
                 onClick={() => {
-                  setShowScenarioManager((v) => { if (!v) setShowPanel(false); return !v; });
-                }}
-                title="Simulation Scenarios"
-                className="action-icon-btn"
-                style={{
-                  height: '24px', borderRadius: '4px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: showScenarioManager ? 'rgba(139, 92, 246, 0.15)' : 'rgba(100, 160, 220, 0.08)',
-                  border: `1px solid ${showScenarioManager ? 'rgba(139, 92, 246, 0.5)' : 'rgba(167, 139, 250, 0.3)'}`,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  cursor: 'pointer', transition: 'all 0.1s ease',
-                  fontSize: '9px',
-                  fontWeight: 900,
-                  padding: '0 10px',
-                  color: '#a78bfa',
-                  letterSpacing: '0.08em'
+                  setHoverOpenedPanel(null);
+                  cancelHoverPanelClose();
+                  setShowPanel((v) => {
+                    const next = !v;
+                    if (next) setActiveTab("simulation");
+                    return next;
+                  });
+                  setShowLibraryPanel(false);
                 }}
                 onMouseEnter={(e) => {
-                  if (!showScenarioManager) {
-                    e.currentTarget.style.background = 'rgba(139, 92, 246, 0.15)';
-                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.5)';
-                  }
+                  cancelHoverPanelClose();
+                  setHoverOpenedPanel("simulation");
+                  setShowPanel(true);
+                  setActiveTab("simulation");
+                  setShowLibraryPanel(false);
+                  setShowExportMenu(false);
+                  setShowQuickProfileMenu(false);
+                  e.currentTarget.style.background = 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)';
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                }}
+                title="Simulate"
+                className="action-icon-btn"
+                style={{
+                  ...topActionBtnBase,
+                  background: showPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)',
+                  border: `1px solid ${showPanel ? 'var(--primary)' : 'var(--primary-glow)'}`,
+                  color: 'var(--primary-strong)',
                 }}
                 onMouseLeave={(e) => {
-                  if (!showScenarioManager) {
-                    e.currentTarget.style.background = 'rgba(100, 160, 220, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.3)';
-                  }
+                  e.currentTarget.style.background = showPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)';
+                  e.currentTarget.style.borderColor = showPanel ? 'var(--primary)' : 'var(--primary-glow)';
+                  scheduleHoverPanelClose();
                 }}
-              >SCENARIOS</button>
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l10 6-10 6V6z" /></svg>
+                SIMULATE
+              </button>
 
               {/* Node Library — icon only */}
               <button
                 onClick={() => {
-                  setShowLibrary((v) => { if (!v) setShowPanel(false); return !v; });
+                  setHoverOpenedPanel(null);
+                  cancelHoverPanelClose();
+                  setShowLibraryPanel((v) => !v);
+                  setShowPanel(false);
+                }}
+                onMouseEnter={(e) => {
+                  cancelHoverPanelClose();
+                  setHoverOpenedPanel("library");
+                  setShowLibraryPanel(true);
+                  setShowPanel(false);
+                  setShowExportMenu(false);
+                  setShowQuickProfileMenu(false);
+                  e.currentTarget.style.background = 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)';
+                  e.currentTarget.style.borderColor = 'var(--primary)';
                 }}
                 title="Node Library"
                 className="action-icon-btn"
                 style={{
-                  height: '24px', borderRadius: '4px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: showLibrary ? 'rgba(167, 139, 250, 0.15)' : 'rgba(100, 160, 220, 0.08)',
-                  border: `1px solid ${showLibrary ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.3)'}`,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  cursor: 'pointer', transition: 'all 0.1s ease',
-                  fontSize: '9px',
-                  fontWeight: 900,
-                  padding: '0 10px',
-                  color: '#a78bfa',
-                  letterSpacing: '0.08em'
-                }}
-                onMouseEnter={(e) => {
-                  if (!showLibrary) {
-                    e.currentTarget.style.background = 'rgba(167, 139, 250, 0.15)';
-                    e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.5)';
-                  }
+                  ...topActionBtnBase,
+                  background: showLibraryPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)',
+                  border: `1px solid ${showLibraryPanel ? 'var(--primary)' : 'var(--primary-glow)'}`,
+                  color: 'var(--primary-strong)',
                 }}
                 onMouseLeave={(e) => {
-                  if (!showLibrary) {
-                    e.currentTarget.style.background = 'rgba(100, 160, 220, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.3)';
-                  }
+                  e.currentTarget.style.background = showLibraryPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)';
+                  e.currentTarget.style.borderColor = showLibraryPanel ? 'var(--primary)' : 'var(--primary-glow)';
+                  scheduleHoverPanelClose();
                 }}
-              >LIBRARY</button>
-
-              {/* Run — icon only, prominent */}
-              <button
-                onClick={() => {
-                  if (showPanel) {
-                    setShowPanel(false);
-                  } else {
-                    handleGenerateSignatures();
-                  }
-                }}
-                disabled={loading}
-                title={loading ? 'Solving…' : 'Run Simulation'}
-                className="action-icon-btn"
-                style={{
-                  height: '24px', borderRadius: '4px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--primary)',
-                  border: '1px solid var(--primary-glow)',
-                  boxShadow: '0 0 12px var(--primary-dim), 0 1px 2px rgba(0,0,0,0.3)',
-                  cursor: loading ? 'wait' : 'pointer',
-                  transition: 'all 0.1s ease',
-                  fontSize: '10px',
-                  fontWeight: 900,
-                  padding: '0 14px',
-                  color: '#fff',
-                  letterSpacing: '0.12em'
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = 'var(--primary-glow)';
-                    e.currentTarget.style.boxShadow = '0 0 20px var(--primary-glow)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = 'var(--primary)';
-                    e.currentTarget.style.boxShadow = '0 0 12px var(--primary-dim)';
-                  }
-                }}
-              >{loading ? 'BUSY' : 'EXECUTE'}</button>
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v16H4zM13 4h7v16h-7z" /></svg>
+                LIBRARY
+              </button>
 
               {/* Export Menu */}
-              <div ref={exportMenuRef} style={{ position: 'relative' }}>
+              <div
+                ref={exportMenuRef}
+                style={{ position: 'relative' }}
+                onMouseEnter={() => {
+                  cancelExportMenuClose();
+                  if (!isPdfExporting && !isCsvExporting) {
+                    setShowExportMenu(true);
+                    setShowQuickProfileMenu(false);
+                  }
+                }}
+                onMouseLeave={scheduleExportMenuClose}
+              >
                 <button
                   onClick={() => setShowExportMenu((v) => !v)}
-                  disabled={isPdfExporting}
+                  disabled={isPdfExporting || isCsvExporting}
                   title="Export"
                   className="action-icon-btn"
                   style={{
-                    height: '24px', borderRadius: '4px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: showExportMenu ? 'rgba(14, 165, 233, 0.18)' : 'rgba(100, 160, 220, 0.08)',
-                    border: `1px solid ${showExportMenu ? 'rgba(14, 165, 233, 0.55)' : 'rgba(14, 165, 233, 0.35)'}`,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                    cursor: isPdfExporting ? 'wait' : 'pointer', transition: 'all 0.1s ease',
-                    fontSize: '9px',
-                    fontWeight: 900,
-                    padding: '0 10px',
-                    color: isPdfExporting ? '#7aa8c5' : '#38bdf8',
-                    letterSpacing: '0.08em'
+                    ...topActionBtnBase,
+                    background: showExportMenu ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)',
+                    border: `1px solid ${showExportMenu ? 'var(--primary)' : 'var(--primary-glow)'}`,
+                    cursor: (isPdfExporting || isCsvExporting) ? 'wait' : 'pointer', transition: 'all 0.1s ease',
+                    color: (isPdfExporting || isCsvExporting) ? 'var(--text-muted)' : 'var(--primary-strong)',
                   }}
                 >
-                  {isPdfExporting ? 'PROCESSING…' : 'EXPORT'}
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></svg>
+                  {(isPdfExporting || isCsvExporting) ? 'PROCESSING…' : 'EXPORT'}
                 </button>
                 {showExportMenu && (
                   <div
+                    onMouseEnter={cancelExportMenuClose}
+                    onMouseLeave={scheduleExportMenuClose}
                     style={{
                       position: 'absolute',
-                      top: '30px',
+                      top: '26px',
                       right: 0,
                       minWidth: '132px',
                       background: 'var(--bg-card)',
@@ -2969,7 +2799,7 @@ function Flow() {
                   >
                     <button
                       onClick={handleExportCsv}
-                      disabled={isPdfExporting}
+                      disabled={isPdfExporting || isCsvExporting}
                       style={{
                         width: '100%',
                         textAlign: 'left',
@@ -2979,8 +2809,8 @@ function Flow() {
                         fontSize: '10px',
                         fontWeight: 700,
                         padding: '8px 10px',
-                        cursor: isPdfExporting ? 'not-allowed' : 'pointer',
-                        opacity: isPdfExporting ? 0.5 : 1,
+                        cursor: (isPdfExporting || isCsvExporting) ? 'not-allowed' : 'pointer',
+                        opacity: (isPdfExporting || isCsvExporting) ? 0.5 : 1,
                         letterSpacing: '0.03em',
                       }}
                     >
@@ -2988,7 +2818,7 @@ function Flow() {
                     </button>
                     <button
                       onClick={handleExportPdf}
-                      disabled={isPdfExporting}
+                      disabled={isPdfExporting || isCsvExporting}
                       style={{
                         width: '100%',
                         textAlign: 'left',
@@ -2999,8 +2829,8 @@ function Flow() {
                         fontSize: '10px',
                         fontWeight: 700,
                         padding: '8px 10px',
-                        cursor: isPdfExporting ? 'not-allowed' : 'pointer',
-                        opacity: isPdfExporting ? 0.5 : 1,
+                        cursor: (isPdfExporting || isCsvExporting) ? 'not-allowed' : 'pointer',
+                        opacity: (isPdfExporting || isCsvExporting) ? 0.5 : 1,
                         letterSpacing: '0.03em',
                       }}
                     >
@@ -3011,7 +2841,16 @@ function Flow() {
               </div>
 
               {/* Quick Profile Menu */}
-              <div ref={quickProfileRef} style={{ position: 'relative' }}>
+              <div
+                ref={quickProfileRef}
+                style={{ position: 'relative' }}
+                onMouseEnter={() => {
+                  cancelQuickProfileMenuClose();
+                  setShowQuickProfileMenu(true);
+                  setShowExportMenu(false);
+                }}
+                onMouseLeave={scheduleQuickProfileMenuClose}
+              >
                 <button
                   onClick={() => setShowQuickProfileMenu((v) => !v)}
                   title="Profile"
@@ -3037,9 +2876,11 @@ function Flow() {
 
                 {showQuickProfileMenu && (
                   <div
+                    onMouseEnter={cancelQuickProfileMenuClose}
+                    onMouseLeave={scheduleQuickProfileMenuClose}
                     style={{
                       position: 'absolute',
-                      top: '30px',
+                      top: '26px',
                       right: 0,
                       minWidth: '124px',
                       background: 'var(--bg-card)',
@@ -3170,25 +3011,32 @@ function Flow() {
               )}
             </div>
 
-            {/* ── Node Library Panel ── */}
-            {showLibrary && (
+            {/* ── Node Library Panel (Standalone) ── */}
+            {showLibraryPanel && (
               <div className="w-[clamp(220px,20vw,280px)] flex flex-col shrink-0 overflow-hidden min-h-0"
+                onMouseEnter={cancelHoverPanelClose}
+                onMouseLeave={() => {
+                  if (hoverOpenedPanel === "library") {
+                    setShowLibraryPanel(false);
+                    setHoverOpenedPanel(null);
+                  }
+                }}
                 style={{
                   ...glassStyle,
-                  borderLeft: '1px solid rgba(100, 160, 220, 0.08)',
+                  borderLeft: '1px solid var(--border-subtle)',
                   boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.3)',
                 }}>
                 <div className="flex items-center justify-between px-4 py-3.5 shrink-0"
-                  style={{ borderBottom: '1px solid rgba(100, 160, 220, 0.08)' }}>
+                  style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <h2 className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>PROJECT // NODE_LIBRARY</h2>
-                  <button onClick={() => setShowLibrary(false)}
+                  <button onClick={() => setShowLibraryPanel(false)}
                     style={{
-                      color: '#4a5568', fontSize: '18px', lineHeight: 1,
+                      color: 'var(--text-muted)', fontSize: '18px', lineHeight: 1,
                       background: 'none', border: 'none', cursor: 'pointer',
                       transition: 'color 0.2s',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#e2e8f0'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#4a5568'}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
                   >×</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
@@ -3197,36 +3045,44 @@ function Flow() {
               </div>
             )}
 
-            {/* ── Output Panel ── */}
-            {showPanel && (compiledJson || backendResult) && (
+            {/* ── Simulate Panel: Simulation | Results ── */}
+            {showPanel && (
               <div className="w-[clamp(300px,30vw,420px)] flex flex-col shrink-0 overflow-hidden min-h-0"
+                onMouseEnter={cancelHoverPanelClose}
+                onMouseLeave={() => {
+                  if (hoverOpenedPanel === "simulation") {
+                    setShowPanel(false);
+                    setHoverOpenedPanel(null);
+                  }
+                }}
                 style={{
                   ...glassStyle,
-                  borderLeft: '1px solid rgba(100, 160, 220, 0.08)',
+                  borderLeft: '1px solid var(--border-subtle)',
                   boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.3)',
                 }}>
                 {/* Panel Header */}
                 <div className="flex items-center justify-between px-4 py-3.5 shrink-0"
-                  style={{ borderBottom: '1px solid rgba(100, 160, 220, 0.08)' }}>
-                  <h2 className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>DATA // COMPUTE_RESULTS</h2>
+                  style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <h2 className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                    {activeTab === "simulation" ? "SIMULATION // ORCHESTRATOR" : "DATA // COMPUTE_RESULTS"}
+                  </h2>
                   <button onClick={() => setShowPanel(false)}
-                    style={{ color: '#4a5568', fontSize: '18px', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#e2e8f0'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#4a5568'}
+                    style={{ color: 'var(--text-muted)', fontSize: '18px', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
                   >×</button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex shrink-0" style={{ borderBottom: '1px solid rgba(100, 160, 220, 0.06)' }}>
+                <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {[
-                    { key: "inputs", label: "INPUTS", color: "#f97316", count: leafInputs.length },
-                    { key: "compiled", label: "TRACE", color: "#22d3ee" },
-                    { key: "solver", label: "OUTPUT", color: "#10b981" },
+                    { key: "simulation", label: "SIMULATION", color: "var(--primary-strong)", count: scenarios.length },
+                    { key: "results", label: "RESULTS", color: "#22d3ee" },
                   ].map((tab) => (
                     <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                       className="flex-1 px-3 py-2.5 text-[11px] font-semibold transition-colors"
                       style={{
-                        color: activeTab === tab.key ? tab.color : '#4a5568',
+                        color: activeTab === tab.key ? tab.color : 'var(--text-muted)',
                         borderBottom: activeTab === tab.key ? `2px solid ${tab.color}` : '2px solid transparent',
                         background: activeTab === tab.key ? 'rgba(255,255,255,0.02)' : 'transparent',
                       }}
@@ -3248,16 +3104,75 @@ function Flow() {
 
                 {/* Tab Content */}
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  {/* ── Inputs Tab ── */}
-                  {activeTab === "inputs" && (
+                  {activeTab === "simulation" && (
+                    <div className="h-full overflow-hidden relative">
+                      <div className="h-full flex flex-col min-h-0">
+                        <div className="flex-1 min-h-0">
+                          <ScenarioManager
+                            embedded
+                            scenarios={scenarios}
+                            setScenarios={setScenarios}
+                            activeScenarioId={activeScenarioId}
+                            setActiveScenarioId={setActiveScenarioId}
+                            onClose={() => setActiveTab("results")}
+                            onBuild={handleGenerateSignatures}
+                            onRun={handleSolve}
+                            onRunAll={handleSolve}
+                            onOpenResults={() => {
+                              setActiveTab("results");
+                              setResultsTab("solver");
+                            }}
+                            onSaveExperiment={handleSaveProject}
+                            isRunning={loading}
+                            hasCompiledGraph={Boolean(compiledJson)}
+                            lastRunRecord={executionRecords[0] || null}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === "results" && (
+                    <>
+                      <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                        {[
+                          { key: "inputs", label: "INPUTS", color: "#f97316", count: leafInputs.length },
+                          { key: "compiled", label: "TRACE", color: "#22d3ee" },
+                          { key: "solver", label: "OUTPUT", color: "#10b981" },
+                        ].map((tab) => (
+                          <button key={tab.key} onClick={() => setResultsTab(tab.key)}
+                            className="flex-1 px-3 py-2 text-[10px] font-semibold transition-colors"
+                            style={{
+                              color: resultsTab === tab.key ? tab.color : 'var(--text-muted)',
+                              borderBottom: resultsTab === tab.key ? `2px solid ${tab.color}` : '2px solid transparent',
+                              background: resultsTab === tab.key ? 'rgba(255,255,255,0.02)' : 'transparent',
+                            }}
+                          >
+                            {tab.label}
+                            {tab.count > 0 && (
+                              <span style={{
+                                marginLeft: '4px', fontSize: '9px',
+                                background: `${tab.color}18`, color: tab.color,
+                                padding: '1px 6px', borderRadius: '10px',
+                              }}>
+                                {tab.count}
+                              </span>
+                            )}
+                            {tab.key === "solver" && loading && <span className="ml-1 animate-pulse">●</span>}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ── Inputs Sub-Tab ── */}
+                      {resultsTab === "inputs" && (
                     <div className="h-full overflow-y-auto p-4">
                       {leafInputs.length === 0 ? (
-                        <p className="text-xs text-center py-8" style={{ color: '#4a5568' }}>
+                        <p className="text-xs text-center py-8" style={{ color: 'var(--text-muted)' }}>
                           All inputs are already connected in this workflow. You can run solve directly.
                         </p>
                       ) : (
                         <div className="space-y-4">
-                          <p className="text-[11px]" style={{ color: '#6b7fa0' }}>
+                          <p className="text-[11px] ui-body">
                             Layer 1 Inputs // Set values for unconnected leaf inputs.
                           </p>
 
@@ -3270,11 +3185,11 @@ function Flow() {
                           ).map(([nodeId, group]) => (
                             <div key={nodeId} className="rounded-xl overflow-hidden"
                               style={{
-                                background: 'rgba(14, 20, 35, 0.4)',
-                                border: '1px solid rgba(100, 160, 220, 0.08)',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-subtle)',
                               }}>
-                              <div className="px-3 py-2" style={{ borderBottom: '1px solid rgba(100, 160, 220, 0.06)' }}>
-                                <span className="text-[10px] font-bold uppercase tracking-tight" style={{ color: '#e2e8f0' }}>
+                              <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                <span className="text-[10px] font-bold uppercase tracking-tight" style={{ color: 'var(--text-primary)' }}>
                                   LAYER 1 // {group.nodeLabel}
                                 </span>
                               </div>
@@ -3282,7 +3197,7 @@ function Flow() {
                                 {group.inputs.map(({ inputName }) => (
                                   <div key={`${nodeId}_${inputName}`} className="flex items-center gap-2">
                                     <label className="text-[11px] w-28 shrink-0 truncate" title={inputName}
-                                      style={{ color: '#93c5fd', fontFamily: "'JetBrains Mono', monospace" }}>
+                                      style={{ color: 'var(--primary-strong)', fontFamily: "var(--font-mono)" }}>
                                       {inputName}
                                     </label>
                                     <input
@@ -3296,18 +3211,18 @@ function Flow() {
                                       }
                                       style={{
                                         flex: 1,
-                                        background: 'rgba(6, 10, 16, 0.5)',
-                                        border: '1px solid rgba(100, 160, 220, 0.1)',
+                                        background: 'var(--bg-card)',
+                                        border: '1px solid var(--border-subtle)',
                                         borderRadius: '8px',
                                         padding: '5px 8px',
                                         fontSize: '12px',
-                                        color: '#e2e8f0',
+                                        color: 'var(--text-primary)',
                                         outline: 'none',
                                         transition: 'border-color 0.2s',
                                         minWidth: 0,
                                       }}
-                                      onFocus={(e) => e.target.style.borderColor = 'rgba(34, 211, 238, 0.4)'}
-                                      onBlur={(e) => e.target.style.borderColor = 'rgba(100, 160, 220, 0.1)'}
+                                      onFocus={(e) => e.target.style.borderColor = 'var(--border-ring)'}
+                                      onBlur={(e) => e.target.style.borderColor = 'var(--border-subtle)'}
                                     />
                                   </div>
                                 ))}
@@ -3331,9 +3246,9 @@ function Flow() {
                             className="w-full active:scale-95 transition-transform"
                             style={{
                               padding: '10px 16px',
-                              background: loading ? 'rgba(100, 160, 220, 0.04)' : 'rgba(16, 185, 129, 0.1)',
-                              color: loading ? '#4a5568' : '#6ee7b7',
-                              borderColor: loading ? 'rgba(100, 160, 220, 0.05)' : 'rgba(16, 185, 129, 0.25)',
+                              background: loading ? 'var(--bg-elevated)' : 'rgba(16, 185, 129, 0.1)',
+                              color: loading ? 'var(--text-muted)' : '#6ee7b7',
+                              borderColor: loading ? 'var(--border-subtle)' : 'rgba(16, 185, 129, 0.25)',
                               boxShadow: loading ? 'none' : '0 0 16px rgba(16, 185, 129, 0.08)',
                               cursor: loading ? 'wait' : 'pointer',
                               fontWeight: 700,
@@ -3344,24 +3259,24 @@ function Flow() {
                         </div>
                       )}
                     </div>
-                  )}
+                      )}
 
-                  {/* ── Compiled Graph Tab → Execution Trace ── */}
-                  {activeTab === "compiled" && compiledJson && (
+                      {/* ── Trace Sub-Tab ── */}
+                      {resultsTab === "compiled" && compiledJson && (
                     <div className="h-full overflow-y-auto">
                       <ExecutionTrace compiledJson={compiledJson} backendResult={backendResult} />
                     </div>
-                  )}
+                      )}
 
-                  {/* ── Solver Tab ── */}
-                  {activeTab === "solver" && (
+                      {/* ── Output Sub-Tab ── */}
+                      {resultsTab === "solver" && (
                     <div className="h-full overflow-y-auto p-4">
                       {error && !loading && (
                         <div className="p-3 text-xs rounded-xl"
                           style={{
                             background: 'rgba(127, 29, 29, 0.3)',
                             border: '1px solid rgba(239, 68, 68, 0.2)',
-                            color: '#fca5a5',
+                            color: '#fecaca',
                           }}>
                           <p className="font-bold mb-1">❌ Backend Error</p>
                           <p>{error}</p>
@@ -3373,28 +3288,19 @@ function Flow() {
                       )}
 
                       {!backendResult && !loading && !error && (
-                        <p className="text-xs text-center py-8" style={{ color: '#4a5568' }}>
+                        <p className="text-xs text-center py-8" style={{ color: 'var(--text-muted)' }}>
                           Click "Process" to solve the graph
                         </p>
                       )}
                     </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
             )}
           </div>
         </div>
-      )}
-
-      {/* ── Scenario Manager Overlay ── */}
-      {activeSection === "workspace" && showScenarioManager && (
-        <ScenarioManager
-          scenarios={scenarios}
-          setScenarios={setScenarios}
-          activeScenarioId={activeScenarioId}
-          setActiveScenarioId={setActiveScenarioId}
-          onClose={() => setShowScenarioManager(false)}
-        />
       )}
 
       {activeSection === "skeleton_editor" && activeSkeletonNodeId && (
@@ -4133,7 +4039,8 @@ function Flow() {
             {activeSection === "premium" && (
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-blue-600/10 border border-blue-500/30 text-blue-500 mb-4 block inline-block">PREM</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm mb-4 block inline-block"
+                    style={{ background: 'var(--primary-dim)', border: '1px solid var(--primary-glow)', color: 'var(--primary-strong)' }}>PREM</span>
                   <span style={{
                     display: 'block', padding: '6px 16px', borderRadius: '2px',
                     background: 'var(--primary-dim)', border: '1px solid var(--primary-glow)',
@@ -4173,7 +4080,7 @@ function Flow() {
           </div>
         </div>
       )}
-      {isPdfExporting && (
+      {(isPdfExporting || isCsvExporting) && (
         <div
           className="fixed inset-0 z-[9997] flex items-center justify-center"
           style={{ background: "rgba(4, 10, 18, 0.78)", backdropFilter: "blur(2px)" }}
@@ -4199,11 +4106,13 @@ function Flow() {
                 }}
               />
               <h3 className="text-sm font-bold uppercase tracking-tight" style={{ color: "#dbeafe" }}>
-                Processing PDF Export
+                {isPdfExporting ? "Processing PDF Export" : "Processing CSV Export"}
               </h3>
             </div>
             <p className="text-xs" style={{ color: "#8fb4de", lineHeight: 1.45 }}>
-              Building and paginating report containers in the background. Download will start automatically once ready.
+              {isPdfExporting
+                ? "Building and paginating report containers in the background. Download will start automatically once ready."
+                : "Compiling workflow export data in the background. Download will start automatically once ready."}
             </p>
           </div>
         </div>

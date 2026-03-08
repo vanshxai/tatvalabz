@@ -136,16 +136,16 @@ export default function NavBar({ activeSection, onSectionChange }) {
             onMouseLeave={handleMouseLeave}
             style={{
                 position: "fixed",
-                top: "14px",
+                top: "66px",
                 bottom: "14px",
                 left: "12px",
                 width: open ? "230px" : "56px",
                 zIndex: 1000,
                 transition: "width 0.2s ease",
                 background: "var(--bg-base)",
-                border: "1px solid rgba(100, 160, 220, 0.12)",
+                border: "1px solid var(--border-technical)",
                 borderRadius: "12px",
-                boxShadow: "0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(100, 160, 220, 0.05)",
+                boxShadow: "var(--shadow-node)",
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
@@ -164,7 +164,7 @@ export default function NavBar({ activeSection, onSectionChange }) {
                     justifyContent: open ? "space-between" : "center",
                     background: open ? "var(--primary-dim)" : "var(--bg-surface)",
                     border: "none",
-                    borderBottom: "1px solid rgba(100, 160, 220, 0.12)",
+                    borderBottom: "1px solid var(--border-technical)",
                     cursor: "pointer",
                     transition: "all 0.15s ease",
                     color: open ? "var(--primary)" : "var(--text-secondary)",
@@ -172,7 +172,7 @@ export default function NavBar({ activeSection, onSectionChange }) {
                     flexShrink: 0,
                 }}
             >
-                <span style={{ fontSize: "10px", fontWeight: 900, letterSpacing: "0.12em", color: open ? "var(--primary)" : "var(--text-primary)" }}>
+                <span style={{ fontSize: "10px", fontWeight: 900, letterSpacing: "0.12em", color: open ? "var(--primary)" : "var(--text-primary)", fontFamily: "var(--font-heading)" }}>
                     {open ? "SYSTEM MENU" : "SYS"}
                 </span>
                 {open && <span style={{ fontSize: "9px", color: "var(--text-muted)", fontWeight: 700 }}>CLOSE</span>}
@@ -196,7 +196,7 @@ export default function NavBar({ activeSection, onSectionChange }) {
                                     style={{
                                         height: "1px",
                                         margin: "6px 8px",
-                                        background: "linear-gradient(90deg, transparent, rgba(100, 160, 220, 0.12), transparent)",
+                                        background: "linear-gradient(90deg, transparent, var(--border-technical), transparent)",
                                     }}
                                 />
                             );
@@ -222,11 +222,11 @@ export default function NavBar({ activeSection, onSectionChange }) {
                                     gap: "12px",
                                     width: "100%",
                                     padding: "10px 14px",
-                                    borderRadius: "12px",
+                                    borderRadius: "10px",
                                     border: "none",
                                     cursor: item.disabled && !isActive ? "not-allowed" : "pointer",
                                     opacity: item.disabled && !isActive ? 0.3 : 1,
-                                    background: isActive ? "rgba(34, 211, 238, 0.1)" : "transparent",
+                                    background: isActive ? "var(--primary-dim)" : "transparent",
                                     transition: "all 0.15s ease",
                                     textAlign: "left",
                                     position: "relative",
@@ -262,10 +262,11 @@ export default function NavBar({ activeSection, onSectionChange }) {
                                 </span>
 
                                 <span style={{
-                                    fontSize: "12px",
+                                    fontSize: "11px",
                                     fontWeight: 500,
                                     color: isActive ? "var(--text-primary)" : item.premium ? "var(--status-warn)" : "var(--text-secondary)",
                                     whiteSpace: "nowrap",
+                                    fontFamily: "var(--font-body)",
                                 }}>
                                     {item.label.toUpperCase()}
                                 </span>
@@ -291,7 +292,7 @@ export default function NavBar({ activeSection, onSectionChange }) {
                             <span style={{
                                 fontSize: "9px", fontWeight: 700, color: "var(--text-muted)",
                                 letterSpacing: "0.1em", textTransform: "uppercase",
-                                fontFamily: "'JetBrains Mono', monospace",
+                                fontFamily: "var(--font-mono)",
                             }}>TatvaLabz</span>
                             <span style={{ fontSize: "8px", color: "var(--text-muted)", opacity: 0.5 }}>OS_CORE_V1.0</span>
                         </div>
