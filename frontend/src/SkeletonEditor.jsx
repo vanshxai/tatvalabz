@@ -808,49 +808,72 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
     ];
 
     return (
-        <div className="flex flex-col w-full h-full bg-[#0a101c]">
+        <div className="flex flex-col w-full h-full" style={{ background: "var(--bg-base)" }}>
             {/* Header */}
-            <header className="flex items-center justify-between px-6 py-3 border-b border-[#a78bfa] border-opacity-30 bg-[#0e1423]">
+            <header className="flex items-center justify-between px-6 py-3 border-b" style={{ borderColor: "var(--border-technical)", background: "var(--bg-card)" }}>
                 <div className="flex items-center gap-4">
-                    <button onClick={onBack} className="text-[#a5b4fc] hover:text-white transition-colors flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider">
+                    <button onClick={onBack} className="transition-colors flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider"
+                        style={{ color: "var(--primary-strong)", fontFamily: "var(--font-mono)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--primary-strong)")}
+                    >
                         EXIT_WORKBENCH
                     </button>
-                    <div className="h-6 w-px bg-white bg-opacity-10" />
+                    <div className="h-6 w-px" style={{ background: "var(--border-subtle)" }} />
                     <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-mono font-bold text-blue-400">CORE //</span>
+                        <span className="text-[12px] font-bold" style={{ fontFamily: "var(--font-mono)", color: "var(--primary-strong)" }}>CORE //</span>
                         <div>
-                            <h2 className="text-[#e2e8f0] font-bold leading-tight">{parentData.displayName || "Custom Component"}</h2>
-                            <p className="text-[#6b7fa0] text-[10px] tracking-widest uppercase">Formula Skeleton Editor</p>
+                            <h2 className="font-bold leading-tight" style={{ color: "var(--text-primary)", fontFamily: "var(--font-heading)" }}>{parentData.displayName || "Custom Component"}</h2>
+                            <p className="text-[10px] tracking-widest uppercase" style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>Formula Skeleton Editor</p>
                         </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
+                        className="action-icon-btn"
                         onClick={() => setShowLibrary((v) => !v)}
                         title={showLibrary ? "Hide Formula Library" : "Show Formula Library"}
                         style={{
                             height: '28px',
-                            borderRadius: '4px',
+                            borderRadius: '10px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            background: showLibrary ? 'rgba(167, 139, 250, 0.15)' : 'rgba(100, 160, 220, 0.08)',
-                            border: `1px solid ${showLibrary ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.3)'}`,
+                            gap: '6px',
+                            background: showLibrary ? 'color-mix(in oklab, var(--primary-dim) 76%, white 24%)' : 'var(--primary-dim)',
+                            border: `1px solid ${showLibrary ? 'var(--primary)' : 'var(--primary-glow)'}`,
                             cursor: 'pointer',
                             transition: 'all 0.1s ease',
                             fontSize: '10px',
                             fontWeight: 900,
                             padding: '0 12px',
-                            color: showLibrary ? '#c4b5fd' : '#a78bfa',
+                            color: showLibrary ? 'var(--text-primary)' : 'var(--primary-strong)',
                             letterSpacing: '0.08em',
+                            fontFamily: "var(--font-body)",
                         }}
                     >
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v16H4zM13 4h7v16h-7z" /></svg>
                         LIBRARY
                     </button>
                     <button
                         onClick={handleSave}
-                        className="bg-[#10b981] hover:bg-[#059669] text-[#ecfdf5] px-6 py-2 rounded-lg font-bold shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all"
+                        className="action-icon-btn rounded-lg font-bold transition-all"
+                        style={{
+                            height: '28px',
+                            padding: '0 14px',
+                            background: "color-mix(in oklab, var(--primary-dim) 76%, white 24%)",
+                            border: "1px solid var(--primary)",
+                            color: "var(--text-primary)",
+                            boxShadow: "0 0 12px var(--primary-glow)",
+                            fontFamily: "var(--font-body)",
+                            letterSpacing: "0.08em",
+                            fontSize: "10px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                        }}
                     >
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v4h8" /></svg>
                         SAVE_CORE
                     </button>
                 </div>
@@ -874,17 +897,18 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
                         fitView
                         className="skeleton-editor-theme"
                     >
-                        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(167, 139, 250, 0.15)" />
+                        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border-subtle)" />
                         <Controls />
                     </ReactFlow>
                 </div>
 
                 {/* Math Node Library Drawer */}
                 <aside
-                    className={`absolute top-0 right-0 h-full w-[260px] min-h-0 overflow-hidden border-l border-[#a78bfa] border-opacity-20 bg-[#060a10] p-4 flex flex-col transition-transform duration-200 ease-out z-30 ${showLibrary ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none"}`}
+                    className={`absolute top-0 right-0 h-full w-[260px] min-h-0 overflow-hidden p-4 flex flex-col transition-transform duration-200 ease-out z-30 ${showLibrary ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none"}`}
+                    style={{ borderLeft: "1px solid var(--border-subtle)", background: "var(--bg-card)" }}
                 >
                     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                        <p className="text-[#818cf8] text-[11px] font-bold uppercase tracking-widest">Formula Blocks</p>
+                        <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--primary-strong)", fontFamily: "var(--font-mono)" }}>Formula Blocks</p>
                         <div className="mt-4 flex flex-col gap-2">
                             {FORMULA_LIBRARY.map((item) => (
                                 <div
@@ -894,14 +918,15 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
                                         e.dataTransfer.setData('application/reactflow-math', JSON.stringify(item));
                                         e.effectAllowed = 'move';
                                     }}
-                                    className="bg-[#0e1423] border border-[#a78bfa] border-opacity-30 p-3 rounded-lg cursor-grab hover:bg-[#1e293b] hover:border-opacity-60 transition-colors shadow-lg"
+                                    className="p-3 rounded-lg cursor-grab transition-colors shadow-lg"
+                                    style={{ background: "var(--bg-surface)", border: "1px solid var(--border-technical)" }}
                                 >
-                                    <span className="text-[#c4b5fd] font-semibold text-sm">{item.label}</span>
+                                    <span className="font-semibold text-sm" style={{ color: "var(--primary-strong)", fontFamily: "var(--font-body)" }}>{item.label}</span>
                                 </div>
                             ))}
                         </div>
 
-                        <p className="text-[#f472b6] text-[11px] font-bold uppercase tracking-widest mt-6">Logic / Flow</p>
+                        <p className="text-[11px] font-bold uppercase tracking-widest mt-6" style={{ color: "var(--accent-cyan)", fontFamily: "var(--font-mono)" }}>Logic / Flow</p>
                         <div className="mt-4 flex flex-col gap-2">
                             {LOGIC_LIBRARY.map((item) => (
                                 <div
@@ -911,16 +936,17 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
                                         e.dataTransfer.setData('application/reactflow-math', JSON.stringify(item));
                                         e.effectAllowed = 'move';
                                     }}
-                                    className="bg-[#1f1b2c] border border-[#f472b6] border-opacity-30 p-3 rounded-lg cursor-grab hover:bg-[#2d2442] hover:border-opacity-60 transition-colors shadow-lg"
+                                    className="p-3 rounded-lg cursor-grab transition-colors shadow-lg"
+                                    style={{ background: "var(--bg-surface)", border: "1px solid var(--accent-cyan-dim)" }}
                                 >
-                                    <span className="text-[#fbcfe8] font-semibold text-sm">{item.label}</span>
+                                    <span className="font-semibold text-sm" style={{ color: "var(--accent-cyan)", fontFamily: "var(--font-body)" }}>{item.label}</span>
                                 </div>
                             ))}
                         </div>
 
                         {TEMPLATE_FORMULA_LIBRARY.length > 0 && (
                             <>
-                                <p className="text-[#fbbf24] text-[11px] font-bold uppercase tracking-widest mt-6">Template Formulas</p>
+                                <p className="text-[11px] font-bold uppercase tracking-widest mt-6" style={{ color: "var(--status-warn)", fontFamily: "var(--font-mono)" }}>Template Formulas</p>
                                 <div className="mt-3 flex flex-col gap-2">
                                     {TEMPLATE_FORMULA_LIBRARY.map((item) => (
                                         <div
@@ -940,11 +966,12 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
                                                 );
                                                 e.effectAllowed = 'move';
                                             }}
-                                            className="bg-[#0b1222] border border-[#fbbf24] border-opacity-30 p-3 rounded-lg cursor-grab hover:bg-[#1d1a2b] hover:border-opacity-70 transition-colors shadow-lg"
+                                            className="p-3 rounded-lg cursor-grab transition-colors shadow-lg"
+                                            style={{ background: "var(--bg-surface)", border: "1px solid rgba(251, 191, 36, 0.35)" }}
                                         >
                                             <div className="flex flex-col gap-1">
-                                                <span className="text-[#fde68a] font-semibold text-sm">{item.label}</span>
-                                                <span className="text-[10px] text-[#cbd5f5] whitespace-nowrap overflow-hidden text-ellipsis">{item.expression}</span>
+                                                <span className="font-semibold text-sm" style={{ color: "#fde68a", fontFamily: "var(--font-body)" }}>{item.label}</span>
+                                                <span className="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{item.expression}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -952,10 +979,10 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
                             </>
                         )}
 
-                        <div className="mt-8 p-4 rounded-xl bg-[#4c1d95] bg-opacity-10 border border-[#4c1d95] border-opacity-30">
-                            <p className="text-[#a5b4fc] text-xs font-semibold mb-2">💡 Pro Tip</p>
-                            <p className="text-[#818cf8] text-[10px] leading-relaxed">
-                                Drag the <strong className="text-white">Custom Expr</strong> block to write complex math manually.
+                        <div className="mt-8 p-4 rounded-xl" style={{ background: "var(--primary-dim)", border: "1px solid var(--primary-glow)" }}>
+                            <p className="text-xs font-semibold mb-2" style={{ color: "var(--primary-strong)", fontFamily: "var(--font-body)" }}>Pro Tip</p>
+                            <p className="text-[10px] leading-relaxed" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-body)" }}>
+                                Drag the <strong style={{ color: "var(--text-primary)" }}>Custom Expr</strong> block to write complex math manually.
                                 Inputs automatically generate based on the variables (a, b, c) you type in the box!
                             </p>
                         </div>

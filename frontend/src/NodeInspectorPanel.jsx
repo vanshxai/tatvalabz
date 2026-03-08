@@ -30,6 +30,66 @@ const extractFormulaVariables = (formulas = {}) => {
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
+const VARIABLE_HINTS = [
+    { pattern: /(temp|temperature|thermal|heat)/i, type: "Thermal Input", note: "Higher values increase heat-linked outcomes." },
+    { pattern: /(pressure|press)/i, type: "Pressure Input", note: "Use realistic process limits to avoid non-physical runs." },
+    { pattern: /(flow|rate|velocity|speed|rpm)/i, type: "Flow/Speed Input", note: "Sweep around operating band before stress testing." },
+    { pattern: /(voltage|current|amp|watt|power|torque)/i, type: "Electrical/Drive Input", note: "Keep safe ranges for hardware validation parity." },
+    { pattern: /(density|mass|weight|volume)/i, type: "Material/Physical Input", note: "Prefer standards or datasheet windows." },
+    { pattern: /(gain|sensitivity|factor|coeff|coefficient)/i, type: "Gain/Coefficient", note: "Start with small relative sweeps (5-15%)." },
+    { pattern: /(offset|bias|drift)/i, type: "Offset/Bias", note: "Test zero-crossing and drift margins." },
+    { pattern: /(efficiency|eta|ratio)/i, type: "Ratio/Bounded", note: "Usually bounded; avoid wide absolute sweeps." },
+];
+
+const inferVariableHint = (varName) => {
+    const hit = VARIABLE_HINTS.find((entry) => entry.pattern.test(varName));
+    return hit || { type: "General Variable", note: "Use conservative ranges first, then widen gradually." };
+};
+
+const getBaseValue = ({ varName, config, sensorParams, sweep, activeScenario }) => {
+    const cfgDefault = Number(config?.defaultParams?.[varName]);
+    if (Number.isFinite(cfgDefault)) return cfgDefault;
+    const sensorDefault = Number(sensorParams?.[varName]);
+    if (Number.isFinite(sensorDefault)) return sensorDefault;
+    const existing = sweep?.[varName];
+    if (existing && Number.isFinite(Number(existing.min)) && Number.isFinite(Number(existing.max))) {
+        return (Number(existing.min) + Number(existing.max)) / 2;
+    }
+    if (activeScenario && existing && Number.isFinite(Number(existing.max))) return Number(existing.max);
+    return 1;
+};
+
+const buildPresetRange = (varName, baseValue, mode = "standard") => {
+    const lowerName = String(varName || "").toLowerCase();
+    const isOffset = /(offset|bias|drift)/i.test(lowerName);
+    const isRatio = /(efficiency|eta|ratio)/i.test(lowerName);
+    const safeBase = Number.isFinite(baseValue) ? baseValue : 1;
+    const absBase = Math.max(Math.abs(safeBase), 1e-6);
+    const spreadMap = { tight: 0.05, standard: 0.1, wide: 0.25 };
+    const spread = spreadMap[mode] ?? 0.1;
+
+    if (isRatio) {
+        const low = Math.max(0, safeBase - spread);
+        const high = Math.min(1, safeBase + spread);
+        return { min: low, max: high, steps: 11 };
+    }
+    if (isOffset) {
+        const width = Math.max(absBase * spread, 0.5);
+        return { min: safeBase - width, max: safeBase + width, steps: 9 };
+    }
+
+    const min = safeBase - (absBase * spread);
+    const max = safeBase + (absBase * spread);
+    return { min, max, steps: mode === "wide" ? 15 : 11 };
+};
+
+const formatCompact = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "0";
+    if (Math.abs(n) >= 10000 || (Math.abs(n) > 0 && Math.abs(n) < 0.001)) return n.toExponential(2);
+    return n.toFixed(4).replace(/\.?0+$/, "");
+};
+
 export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, setScenarios, scenarios }) {
     const { getNode, updateNodeData, setNodes, setEdges } = useReactFlow();
     const node = getNode(nodeId);
@@ -70,32 +130,55 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
         }
     }, [nodeId, sweepableVars, updateNodeData, data.sweepable_variables]);
 
-    const handleSweepChange = (varName, field, value) => {
+    const updateSweepVariable = (varName, updater) => {
         if (activeScenarioId && setScenarios) {
-            // Write to Scenario
             setScenarios(prev => prev.map(s => {
                 if (s.id !== activeScenarioId) return s;
                 const nodeSweeps = s.sweeps[nodeId] || {};
                 const currentVar = sweepData[varName] || { min: 0, max: 1, steps: 10 };
+                const nextVar = updater(currentVar);
                 return {
                     ...s,
                     sweeps: {
                         ...s.sweeps,
                         [nodeId]: {
                             ...nodeSweeps,
-                            [varName]: { ...currentVar, [field]: parseFloat(value) || 0 }
+                            [varName]: nextVar
                         }
                     }
                 };
             }));
         } else {
-            // Write to Global (Standard)
             const currentSweep = data.sweep || {};
             const currentVar = sweepData[varName] || { min: 0, max: 1, steps: 10 };
+            const nextVar = updater(currentVar);
             updateNodeData(nodeId, {
-                sweep: { ...currentSweep, [varName]: { ...currentVar, [field]: parseFloat(value) || 0 } },
+                sweep: { ...currentSweep, [varName]: nextVar },
             });
         }
+    };
+
+    const handleSweepChange = (varName, field, value) => {
+        updateSweepVariable(varName, (currentVar) => {
+            if (field === "steps") {
+                const parsedSteps = Math.max(1, Math.round(Number(value) || 1));
+                return { ...currentVar, steps: parsedSteps };
+            }
+            const parsed = Number(value);
+            return { ...currentVar, [field]: Number.isFinite(parsed) ? parsed : 0 };
+        });
+    };
+
+    const handleApplySweepPreset = (varName, mode) => {
+        const base = getBaseValue({
+            varName,
+            config,
+            sensorParams,
+            sweep: sweepData,
+            activeScenario,
+        });
+        const preset = buildPresetRange(varName, base, mode);
+        updateSweepVariable(varName, () => preset);
     };
 
     const isCustom = componentType === "custom_formula";
@@ -456,8 +539,8 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                     SENSOR_TUNING
                                 </p>
                                 <span style={{
-                                    fontSize: "7px", fontWeight: "bold", color: "#94a3b8",
-                                    padding: "1px 6px", borderRadius: "2px", border: "1px solid rgba(148, 163, 184, 0.2)"
+                                    fontSize: "7px", fontWeight: "bold", color: "var(--text-secondary)",
+                                    padding: "1px 6px", borderRadius: "2px", border: "1px solid var(--border-subtle)"
                                 }}>
                                     Optional
                                 </span>
@@ -466,7 +549,7 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                 {sensorFieldConfig.map((field) => (
                                     <div key={field.key} className="flex flex-col gap-1">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-[8px] uppercase font-bold tracking-[0.1em]" style={{ color: "#94a3b8" }}>{field.label}</span>
+                                            <span className="text-[8px] uppercase font-bold tracking-[0.1em]" style={{ color: "var(--text-secondary)" }}>{field.label}</span>
                                         </div>
                                         <input
                                             type="number"
@@ -476,25 +559,25 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                             placeholder="Leave blank to inherit default"
                                             style={{
                                                 width: "100%",
-                                                background: "rgba(6, 10, 16, 0.4)",
-                                                border: "1px solid rgba(148, 163, 184, 0.2)",
+                                                background: "var(--bg-surface)",
+                                                border: "1px solid var(--border-subtle)",
                                                 borderRadius: "6px",
                                                 padding: "5px 8px",
                                                 fontSize: "10px",
-                                                color: "#e2e8f0",
+                                                color: "var(--text-primary)",
                                                 outline: "none",
-                                                fontFamily: "'JetBrains Mono', monospace",
+                                                fontFamily: "var(--font-mono)",
                                             }}
-                                            onFocus={(e) => e.target.style.borderColor = "rgba(59, 130, 246, 0.6)"}
-                                            onBlur={(e) => e.target.style.borderColor = "rgba(148, 163, 184, 0.2)"}
+                                            onFocus={(e) => e.target.style.borderColor = "var(--border-ring)"}
+                                            onBlur={(e) => e.target.style.borderColor = "var(--border-subtle)"}
                                         />
-                                        <span className="text-[7px] text-[#6b7280]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{field.helper}</span>
+                                        <span className="text-[7px]" style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{field.helper}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Sweep Config (if any) or Custom Config */}
+                        {/* Experiment Variable Ranges (if any) or Custom Config */}
                         <div className="flex flex-col gap-2">
                             {sweepableVars.length > 0 && (
                                 <div className="p-3 rounded-sm border flex-1" style={{
@@ -503,7 +586,7 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                 }}>
                                     <div className="flex items-center justify-between mb-2.5">
                                         <p className="text-[8px] uppercase tracking-[0.25em] font-bold flex items-center gap-1.5" style={{ color: "var(--status-warn)", margin: 0 }}>
-                                            SWEEP_PARAMETERS
+                                            EXPERIMENT_VARIABLE_RANGES
                                         </p>
                                         {activeScenario && (
                                             <span style={{
@@ -511,12 +594,20 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                                 padding: "1px 6px", borderRadius: "2px", border: "1px solid var(--primary-glow)",
                                                 textTransform: "uppercase"
                                             }}>
-                                                SCENARIO_OVERRIDE
+                                                SCENARIO_RANGE_OVERRIDE
                                             </span>
                                         )}
                                     </div>
                                     {sweepableVars.map((varName) => {
                                         const sv = sweepData[varName] || { min: 0, max: 1, steps: 10 };
+                                        const hint = inferVariableHint(varName);
+                                        const base = getBaseValue({
+                                            varName,
+                                            config,
+                                            sensorParams,
+                                            sweep: sweepData,
+                                            activeScenario,
+                                        });
 
                                         return (
                                             <div key={varName} className="mb-3 last:mb-0">
@@ -528,17 +619,91 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                                         background: "rgba(251, 191, 36, 0.1)",
                                                         border: "1px solid rgba(251, 191, 36, 0.25)",
                                                         color: "#fbbf24", fontSize: "9px", fontWeight: 600,
-                                                        fontFamily: "'JetBrains Mono', monospace",
+                                                        fontFamily: "var(--font-mono)",
                                                     }}>
                                                         <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#fbbf24", opacity: 0.6 }} />
                                                         {varName}
                                                     </span>
                                                     <span style={{
-                                                        fontSize: "8px", color: "#4a5568",
-                                                        fontFamily: "'JetBrains Mono', monospace",
+                                                        fontSize: "8px", color: "var(--text-muted)",
+                                                        fontFamily: "var(--font-mono)",
                                                     }}>
                                                         {sv.steps} steps
                                                     </span>
+                                                </div>
+                                                <div style={{
+                                                    marginBottom: "6px",
+                                                    padding: "5px 7px",
+                                                    borderRadius: "6px",
+                                                    background: "var(--primary-dim)",
+                                                    border: "1px solid var(--primary-glow)",
+                                                }}>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
+                                                        <span style={{ fontSize: "8px", color: "var(--primary-strong)", fontWeight: 700, letterSpacing: "0.04em" }}>{hint.type}</span>
+                                                        <span style={{ fontSize: "8px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+                                                            base {formatCompact(base)}
+                                                        </span>
+                                                    </div>
+                                                    <p style={{
+                                                        margin: 0,
+                                                        color: "var(--text-secondary)",
+                                                        fontSize: "8px",
+                                                        lineHeight: 1.35,
+                                                        fontFamily: "var(--font-mono)",
+                                                    }}>{hint.note}</p>
+                                                    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleApplySweepPreset(varName, "tight")}
+                                                            style={{
+                                                                background: "var(--primary-dim)",
+                                                                border: "1px solid var(--primary-glow)",
+                                                                color: "var(--primary-strong)",
+                                                                borderRadius: "10px",
+                                                                padding: "1px 6px",
+                                                                fontSize: "7px",
+                                                                fontWeight: 700,
+                                                                letterSpacing: "0.04em",
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            AUTO ±5%
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleApplySweepPreset(varName, "standard")}
+                                                            style={{
+                                                                background: "var(--accent-cyan-dim)",
+                                                                border: "1px solid rgba(34, 211, 238, 0.35)",
+                                                                color: "var(--accent-cyan)",
+                                                                borderRadius: "10px",
+                                                                padding: "1px 6px",
+                                                                fontSize: "7px",
+                                                                fontWeight: 700,
+                                                                letterSpacing: "0.04em",
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            AUTO ±10%
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleApplySweepPreset(varName, "wide")}
+                                                            style={{
+                                                                background: "rgba(245,158,11,0.14)",
+                                                                border: "1px solid rgba(245,158,11,0.35)",
+                                                                color: "#fde68a",
+                                                                borderRadius: "10px",
+                                                                padding: "1px 6px",
+                                                                fontSize: "7px",
+                                                                fontWeight: 700,
+                                                                letterSpacing: "0.04em",
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            AUTO ±25%
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 {/* Compact 2-column grid */}
@@ -549,13 +714,13 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                                     ].map(({ label, field, val }) => (
                                                         <div key={field} style={{
                                                             display: "flex", alignItems: "center", gap: "4px",
-                                                            background: "rgba(6, 10, 16, 0.4)",
+                                                            background: "var(--bg-surface)",
                                                             border: "1px solid rgba(245, 158, 11, 0.1)",
                                                             borderRadius: "6px", padding: "3px 6px",
                                                         }}>
                                                             <span style={{
-                                                                fontSize: "7px", color: "#4a5568", textTransform: "uppercase",
-                                                                fontFamily: "'JetBrains Mono', monospace", fontWeight: 700,
+                                                                fontSize: "7px", color: "var(--text-muted)", textTransform: "uppercase",
+                                                                fontFamily: "var(--font-mono)", fontWeight: 700,
                                                                 letterSpacing: "0.08em", flexShrink: 0,
                                                             }}>{label}</span>
                                                             <input type="number" step="any" value={val}
@@ -564,7 +729,7 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                                                     flex: 1, width: "100%", background: "transparent",
                                                                     border: "none", fontSize: "10px", color: "#fef3c7",
                                                                     textAlign: "right", outline: "none",
-                                                                    fontFamily: "'JetBrains Mono', monospace",
+                                                                    fontFamily: "var(--font-mono)",
                                                                 }}
                                                             />
                                                         </div>
@@ -572,13 +737,13 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                                     <div style={{
                                                         gridColumn: "1 / -1",
                                                         display: "flex", alignItems: "center", gap: "4px",
-                                                        background: "rgba(6, 10, 16, 0.4)",
+                                                        background: "var(--bg-surface)",
                                                         border: "1px solid rgba(245, 158, 11, 0.1)",
                                                         borderRadius: "6px", padding: "3px 6px",
                                                     }}>
                                                         <span style={{
-                                                            fontSize: "7px", color: "#4a5568", textTransform: "uppercase",
-                                                            fontFamily: "'JetBrains Mono', monospace", fontWeight: 700,
+                                                            fontSize: "7px", color: "var(--text-muted)", textTransform: "uppercase",
+                                                            fontFamily: "var(--font-mono)", fontWeight: 700,
                                                             letterSpacing: "0.08em", flexShrink: 0,
                                                         }}>Steps</span>
                                                         <input type="number" step="1" min="1" value={sv.steps}
@@ -587,7 +752,7 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                                                 flex: 1, width: "100%", background: "transparent",
                                                                 border: "none", fontSize: "10px", color: "#fef3c7",
                                                                 textAlign: "right", outline: "none",
-                                                                fontFamily: "'JetBrains Mono', monospace",
+                                                                fontFamily: "var(--font-mono)",
                                                             }}
                                                         />
                                                     </div>
@@ -600,10 +765,10 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
 
                             {isCustom && (
                                 <div className="p-3 rounded-xl border flex-1" style={{
-                                    background: "rgba(99, 102, 241, 0.04)",
-                                    borderColor: "rgba(99, 102, 241, 0.12)",
+                                    background: "var(--primary-dim)",
+                                    borderColor: "var(--primary-glow)",
                                 }}>
-                                    <p className="text-[9px] uppercase tracking-[0.2em] mb-2 font-semibold" style={{ color: "#818cf8" }}>
+                                    <p className="text-[9px] uppercase tracking-[0.2em] mb-2 font-semibold" style={{ color: "var(--primary-strong)" }}>
                                         Config
                                     </p>
                                     <div className="flex flex-col gap-2 mb-2">
@@ -612,16 +777,16 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                             { label: "Outputs (comma-separated)", placeholder: "e.g. out1, out2", value: data.customOutputsString !== undefined ? data.customOutputsString : customOutputs.join(", "), onChange: handleCustomOutputsChange },
                                         ].map((f) => (
                                             <div key={f.label}>
-                                                <p className="text-[8px] mb-0.5" style={{ color: "#a5b4fc" }}>{f.label}</p>
+                                                <p className="text-[8px] mb-0.5" style={{ color: "var(--primary-strong)" }}>{f.label}</p>
                                                 <input type="text" placeholder={f.placeholder} value={f.value} onChange={f.onChange}
                                                     style={{
-                                                        width: "100%", background: "rgba(6, 10, 16, 0.5)",
-                                                        border: "1px solid rgba(99, 102, 241, 0.2)", borderRadius: "6px",
-                                                        padding: "4px 8px", fontSize: "11px", color: "#e2e8f0",
+                                                        width: "100%", background: "var(--bg-surface)",
+                                                        border: "1px solid var(--primary-glow)", borderRadius: "6px",
+                                                        padding: "4px 8px", fontSize: "11px", color: "var(--text-primary)",
                                                         outline: "none", transition: "border-color 0.2s",
                                                     }}
-                                                    onFocus={(e) => e.target.style.borderColor = "rgba(99, 102, 241, 0.5)"}
-                                                    onBlur={(e) => e.target.style.borderColor = "rgba(99, 102, 241, 0.2)"}
+                                                    onFocus={(e) => e.target.style.borderColor = "var(--primary)"}
+                                                    onBlur={(e) => e.target.style.borderColor = "var(--primary-glow)"}
                                                 />
                                             </div>
                                         ))}
@@ -636,7 +801,7 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                 </div>
 
                 {/* ── RIGHT PANEL: FORMULAS / MINI-CANVAS ── */}
-                <div className="flex-1 flex flex-col relative" style={{ background: 'rgba(6, 10, 16, 0.4)' }}>
+                <div className="flex-1 flex flex-col relative" style={{ background: 'var(--bg-surface)' }}>
                     <MiniCanvas parentNodeId={nodeId} parentNodeData={data} />
                 </div>
             </div>
@@ -650,8 +815,8 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                     right: "2px",
                     bottom: "2px",
                     cursor: "nwse-resize",
-                    borderRight: "2px solid rgba(103, 232, 249, 0.5)",
-                    borderBottom: "2px solid rgba(103, 232, 249, 0.5)",
+                    borderRight: "2px solid var(--primary-glow)",
+                    borderBottom: "2px solid var(--primary-glow)",
                     opacity: 0.9,
                 }}
                 aria-label="Resize inspector panel"

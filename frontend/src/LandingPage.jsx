@@ -61,11 +61,11 @@ export default function LandingPage({ onStart, onAuth }) {
                         display: inline-block;
                         width: 3px;
                         height: 0.75em;
-                        background-color: #22d3ee;
+                        background-color: var(--primary-strong);
                         margin-left: 6px;
                         animation: blink 1s step-end infinite;
                         vertical-align: middle;
-                        box-shadow: 0 0 8px rgba(34, 211, 238, 0.5);
+                        box-shadow: 0 0 8px var(--primary-glow);
                         border-radius: 1px;
                     }
                     @keyframes float-up {
@@ -100,10 +100,11 @@ export default function LandingPage({ onStart, onAuth }) {
                 }}
             >
                 <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-blue-600/10 border border-blue-500/30 text-blue-500 backdrop-blur-md">CORE</span>
+                    <span className="text-[10px] font-bold px-3 py-1 rounded-full backdrop-blur-md"
+                        style={{ background: 'var(--primary-dim)', border: '1px solid var(--primary-glow)', color: 'var(--primary-strong)' }}>CORE</span>
                     <div className="flex flex-col">
                         <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-white m-0">
-                            Tatva<span className="text-blue-500">Labz</span>
+                            Tatva<span style={{ color: "var(--primary-strong)" }}>Labz</span>
                         </h1>
                         <span className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#6b7fa0', fontFamily: "'JetBrains Mono', monospace" }}>
                             inspired by conciousness
@@ -133,7 +134,7 @@ export default function LandingPage({ onStart, onAuth }) {
                         transition: 'all 0.15s',
                         backdropFilter: 'blur(4px)',
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'; e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.3)'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'; e.currentTarget.style.borderColor = 'var(--primary-glow)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'; }}
                 >
                     Sign Up
@@ -147,9 +148,9 @@ export default function LandingPage({ onStart, onAuth }) {
                     <div className="inline-flex items-center gap-2 px-5 py-2 mb-10"
                         style={{
                             borderRadius: '30px',
-                            background: 'rgba(34, 211, 238, 0.1)',
-                            border: '1px solid rgba(34, 211, 238, 0.25)',
-                            color: '#22d3ee',
+                            background: 'var(--primary-dim)',
+                            border: '1px solid var(--primary-glow)',
+                            color: 'var(--primary-strong)',
                             fontSize: '11px',
                             fontWeight: 700,
                             letterSpacing: '0.1em',
@@ -157,9 +158,9 @@ export default function LandingPage({ onStart, onAuth }) {
                         }}>
                         <span className="relative flex h-2.5 w-2.5">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                                style={{ background: '#22d3ee' }} />
+                                style={{ background: 'var(--primary-strong)' }} />
                             <span className="relative inline-flex rounded-full h-2.5 w-2.5"
-                                style={{ background: '#22d3ee', boxShadow: '0 0 8px rgba(34, 211, 238, 0.5)' }} />
+                                style={{ background: 'var(--primary-strong)', boxShadow: '0 0 8px var(--primary-glow)' }} />
                         </span>
                         V1.0 · PUBLIC BETA
                     </div>
@@ -184,7 +185,7 @@ export default function LandingPage({ onStart, onAuth }) {
                             padding: '18px 48px',
                             borderRadius: '20px',
                             background: 'rgba(255, 255, 255, 0.08)',
-                            border: '1px solid rgba(34, 211, 238, 0.2)',
+                            border: '1px solid var(--primary-glow)',
                             color: '#fff',
                             fontSize: '15px',
                             fontWeight: 800,
@@ -192,20 +193,20 @@ export default function LandingPage({ onStart, onAuth }) {
                             letterSpacing: '0.15em',
                             cursor: 'pointer',
                             backdropFilter: 'blur(10px)',
-                            boxShadow: '0 8px 32px rgba(34, 211, 238, 0.1), inset 0 1px 0 rgba(255,255,255,0.1)',
+                            boxShadow: '0 8px 32px var(--primary-dim), inset 0 1px 0 rgba(255,255,255,0.1)',
                             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                         }}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(255, 255, 255, 0.14)';
-                            e.currentTarget.style.boxShadow = '0 8px 40px rgba(34, 211, 238, 0.2), inset 0 1px 0 rgba(255,255,255,0.15)';
+                            e.currentTarget.style.boxShadow = '0 8px 40px var(--primary-glow), inset 0 1px 0 rgba(255,255,255,0.15)';
                             e.currentTarget.style.transform = 'scale(1.05)';
-                            e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.5)';
+                            e.currentTarget.style.borderColor = 'var(--primary)';
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                            e.currentTarget.style.boxShadow = '0 8px 32px rgba(34, 211, 238, 0.1), inset 0 1px 0 rgba(255,255,255,0.1)';
+                            e.currentTarget.style.boxShadow = '0 8px 32px var(--primary-dim), inset 0 1px 0 rgba(255,255,255,0.1)';
                             e.currentTarget.style.transform = 'scale(1)';
-                            e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.2)';
+                            e.currentTarget.style.borderColor = 'var(--primary-glow)';
                         }}
                     >
                         Launch Workspace <span className="inline-block group-hover:translate-x-1 transition-transform">→</span>
@@ -263,7 +264,7 @@ export default function LandingPage({ onStart, onAuth }) {
                             backdropFilter: 'blur(10px)',
                             boxShadow: '0 8px 48px rgba(34, 211, 238, 0.15)',
                         }}>
-                        <div className="absolute top-0 right-0 p-8 text-[10px] font-bold opacity-40 tracking-widest text-blue-500">CARBON_INTELLIGENCE</div>
+                        <div className="absolute top-0 right-0 p-8 text-[10px] font-bold opacity-40 tracking-widest" style={{ color: "var(--primary-strong)" }}>CARBON_INTELLIGENCE</div>
                         <h4 className="text-xs font-bold uppercase tracking-[0.25em] mb-8"
                             style={{ color: '#22d3ee', fontFamily: "'JetBrains Mono', monospace" }}>
                             TatvaLabz Engineering Intel
@@ -356,7 +357,7 @@ export default function LandingPage({ onStart, onAuth }) {
 
                     <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-6 leading-tight">
                         PRIVACY AT THE <br />
-                        <span style={{ color: '#22d3ee' }}>LOCAL CORE.</span>
+                        <span style={{ color: 'var(--primary-strong)' }}>LOCAL CORE.</span>
                     </h2>
 
                     <p className="text-lg max-w-2xl mb-12 font-light leading-relaxed" style={{ color: '#cbd5e1' }}>
@@ -434,7 +435,7 @@ export default function LandingPage({ onStart, onAuth }) {
 
                     <h2 className="text-5xl md:text-7xl font-black tracking-tighter mb-8 relative z-10">
                         STOP MODELING. <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-amber-400">
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-300">
                             START SOLVING.
                         </span>
                     </h2>

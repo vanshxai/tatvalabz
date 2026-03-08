@@ -16,6 +16,25 @@ import { InlineMath } from 'react-katex';
 import { parse } from 'mathjs';
 import { LogicNode, ForLoopNode, WhileLoopNode } from './SkeletonEditor';
 
+const miniEditorBtnStyle = {
+    height: "26px",
+    borderRadius: "10px",
+    background: "var(--primary-dim)",
+    color: "var(--primary-strong)",
+    border: "1px solid var(--primary-glow)",
+    padding: "0 10px",
+    fontSize: "10px",
+    fontWeight: "bold",
+    cursor: "pointer",
+    transition: "all 0.15s",
+    textTransform: "uppercase",
+    fontFamily: "var(--font-body)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+};
+
 // ── CUSTOM NODES FOR MINI-CANVAS ──
 
 // A simple expression node (e.g., Add, Multiply)
@@ -40,9 +59,9 @@ function MathOpNode({ data }) {
             borderRadius: "4px",
             border: "1px solid var(--border-technical)",
             padding: "8px 12px",
-            color: "#e2e8f0",
+            color: "var(--text-primary)",
             fontSize: "12px",
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "var(--font-mono)",
             minWidth: isCustom ? "150px" : "80px",
             textAlign: "center",
             boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
@@ -70,13 +89,13 @@ function MathOpNode({ data }) {
                     position={Position.Top}
                     id={inp}
                     style={{
-                        background: "#c4b5fd",
+                        background: "var(--primary-strong)",
                         left: `${(100 / (arr.length + 1)) * (i + 1)}%`,
                     }}
                 />
             ))}
 
-            <div style={{ color: "#a5b4fc", fontWeight: "bold", marginBottom: isCustom ? "4px" : "0" }}>
+            <div style={{ color: "var(--primary-strong)", fontWeight: "bold", marginBottom: isCustom ? "4px" : "0" }}>
                 {data.label}
             </div>
 
@@ -84,20 +103,20 @@ function MathOpNode({ data }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
                     {/* Beautiful LaTeX Render Area (Read-Only) */}
                     <div style={{
-                        background: "rgba(0,0,0,0.5)",
+                        background: "var(--bg-surface)",
                         padding: "8px",
                         borderRadius: "6px",
                         minHeight: "40px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        border: "1px solid rgba(167,139,250,0.2)",
-                        color: "#e2e8f0"
+                        border: "1px solid var(--border-subtle)",
+                        color: "var(--text-primary)"
                     }}>
                         {data.expression ? (
                             <InlineMath math={texString} errorColor={'#ef4444'} />
                         ) : (
-                            <span style={{ color: "#6b7fa0", fontSize: "10px" }}>Empty f(x)</span>
+                            <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>Empty f(x)</span>
                         )}
                     </div>
                 </div>
@@ -113,13 +132,13 @@ function TerminalNode({ data }) {
     const isInput = data.type === "input";
     return (
         <div style={{
-            background: isInput ? "rgba(249, 115, 22, 0.05)" : "rgba(16, 185, 129, 0.05)",
+            background: isInput ? "rgba(249, 115, 22, 0.08)" : "rgba(16, 185, 129, 0.08)",
             borderRadius: "2px",
-            border: `1px solid ${isInput ? "rgba(249, 115, 22, 0.2)" : "rgba(16, 185, 129, 0.2)"}`,
+            border: `1px solid ${isInput ? "rgba(249, 115, 22, 0.35)" : "rgba(16, 185, 129, 0.35)"}`,
             padding: "2px 6px",
             color: isInput ? "#fdba74" : "#6ee7b7",
             fontSize: "11px",
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontWeight: "bold"
         }}>
             {!isInput && <Handle type="target" position={Position.Top} style={{ background: "#6ee7b7" }} />}
@@ -188,7 +207,7 @@ function MiniCanvasInner({ parentNodeId, parentNodeData }) {
                 nodesConnectable={false}
                 elementsSelectable={false}
             >
-                <Background variant={BackgroundVariant.Dots} gap={15} size={1} color="rgba(255, 255, 255, 0.05)" />
+                <Background variant={BackgroundVariant.Dots} gap={15} size={1} color="var(--border-subtle)" />
                 <Controls showInteractive={false} style={{ bottom: 10, left: 10 }} />
             </ReactFlow>
 
@@ -196,7 +215,7 @@ function MiniCanvasInner({ parentNodeId, parentNodeData }) {
                 <div style={{
                     position: "absolute", inset: 0, zIndex: 10,
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    background: "rgba(5, 5, 5, 0.4)",
+                    background: "rgba(7, 12, 23, 0.6)",
                     pointerEvents: "none"
                 }}>
                     <div style={{
@@ -211,49 +230,45 @@ function MiniCanvasInner({ parentNodeId, parentNodeData }) {
                             Internal physics formula skeleton is locked to prevent accidental mutation. Use the logic editor for modifications.
                         </p>
                         <button
+                            className="action-icon-btn"
                             onClick={() => {
                                 const event = new CustomEvent("openSkeletonEditor", { detail: { nodeId: parentNodeId } });
                                 window.dispatchEvent(event);
                             }}
-                            style={{
-                                background: "var(--bg-elevated)", color: "var(--text-primary)",
-                                border: "1px solid var(--border-technical)", borderRadius: "2px",
-                                padding: "6px 12px", fontSize: "10px", fontWeight: "bold",
-                                cursor: "pointer", transition: "all 0.15s", textTransform: 'uppercase'
-                            }}
+                            style={miniEditorBtnStyle}
                             onMouseEnter={(e) => {
-                                e.currentTarget.style.background = "rgba(167, 139, 250, 0.3)";
-                                e.currentTarget.style.boxShadow = "0 0 12px rgba(167, 139, 250, 0.2)";
+                                e.currentTarget.style.background = "color-mix(in oklab, var(--primary-dim) 78%, white 22%)";
+                                e.currentTarget.style.boxShadow = "0 0 12px var(--primary-glow)";
                             }}
                             onMouseLeave={(e) => {
-                                e.currentTarget.style.background = "rgba(167, 139, 250, 0.2)";
+                                e.currentTarget.style.background = "var(--primary-dim)";
                                 e.currentTarget.style.boxShadow = "none";
                             }}
                         >
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z" /><path d="M14.06 4.19l3.75 3.75" /></svg>
                             EDIT // LOGIC_EDITOR
                         </button>
                     </div>
                 </div>
             ) : (
                 <button
+                    className="action-icon-btn"
                     onClick={() => {
                         const event = new CustomEvent("openSkeletonEditor", { detail: { nodeId: parentNodeId } });
                         window.dispatchEvent(event);
                     }}
                     style={{
+                        ...miniEditorBtnStyle,
                         position: "absolute", top: "10px", right: "10px", zIndex: 10,
-                        background: "var(--bg-elevated)", color: "var(--text-primary)",
-                        border: "1px solid var(--border-technical)", borderRadius: "2px",
-                        padding: "4px 8px", fontSize: "10px", fontWeight: "bold",
-                        cursor: "pointer", transition: "all 0.15s", textTransform: 'uppercase'
                     }}
                     onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "rgba(167, 139, 250, 0.3)";
+                        e.currentTarget.style.background = "color-mix(in oklab, var(--primary-dim) 78%, white 22%)";
                     }}
                     onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "rgba(167, 139, 250, 0.2)";
+                        e.currentTarget.style.background = "var(--primary-dim)";
                     }}
                 >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z" /><path d="M14.06 4.19l3.75 3.75" /></svg>
                     EDIT // LOGIC_SKELETON
                 </button>
             )}

@@ -1,5 +1,5 @@
 /* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Sora:wght@500;600;700;800&display=swap');
 
 @import "tailwindcss";
 
@@ -8,37 +8,48 @@
    ══════════════════════════════════════════════════ */
 
 :root {
-  /* ── Core Palette: Matte Black ── */
-  --bg-base: #09090b;
-  --bg-surface: #18181b;
-  --bg-card: #09090b;
-  --bg-elevated: #27272a;
-  --canvas-bg: #050505;
+  /* ── Typography System ── */
+  --font-heading: 'Sora', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'SFMono-Regular', monospace;
 
-  /* ── Technical Accents: Royal Blue ── */
-  --primary: #2563eb;
-  --primary-glow: rgba(37, 99, 235, 0.35);
-  --primary-dim: rgba(37, 99, 235, 0.1);
+  /* ── Core Palette: Premium Carbon ── */
+  --bg-base: #090d1a;
+  --bg-surface: #10182b;
+  --bg-card: #0c1425;
+  --bg-elevated: #16203a;
+  --canvas-bg: #070c17;
+
+  /* ── Primary Accent: Dark Cyan ── */
+  --primary: #0e7490;
+  --primary-glow: rgba(14, 116, 144, 0.52);
+  --primary-dim: rgba(14, 116, 144, 0.22);
+  --primary-strong: #22d3ee;
+
+  /* ── Secondary Accent: Purple ── */
+  --accent-cyan: #8b5cf6;
+  --accent-cyan-dim: rgba(139, 92, 246, 0.16);
 
   /* ── Status Colors ── */
   --status-ok: #10b981;
   --status-warn: #fbbf24;
   --status-err: #ef4444;
-  --status-info: #3b82f6;
+  --status-info: #38bdf8;
 
   /* ── Text ── */
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #52525b;
+  --text-primary: #eef3ff;
+  --text-secondary: #b9c3dc;
+  --text-muted: #7f8baa;
 
   /* ── Borders & Outlines ── */
-  --border-technical: rgba(255, 255, 255, 0.08);
-  --border-active: #2563eb;
-  --border-ring: rgba(37, 99, 235, 0.5);
+  --border-technical: rgba(34, 211, 238, 0.26);
+  --border-subtle: rgba(34, 211, 238, 0.14);
+  --border-active: #22d3ee;
+  --border-ring: rgba(34, 211, 238, 0.45);
 
   /* ── Shadows (Tight, High Contrast) ── */
-  --shadow-node: 0 4px 6px -1px rgba(0, 0, 0, 0.7), 0 2px 4px -2px rgba(0, 0, 0, 0.7);
-  --shadow-technical: 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow-node: 0 10px 26px rgba(2, 6, 18, 0.65), 0 0 0 1px rgba(34, 211, 238, 0.1);
+  --shadow-technical: 0 0 0 1px rgba(34, 211, 238, 0.08);
 }
 
 /* ── Light Mode ── */
@@ -76,9 +87,19 @@ body,
   padding: 0;
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  letter-spacing: 0.01em;
 }
 
 /* ══════════════════════════════════════════════════
@@ -122,6 +143,77 @@ body::after {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-dim);
   outline: none;
+}
+
+.ui-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ui-title {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.ui-body {
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+}
+
+.ui-mono {
+  font-family: var(--font-mono);
+}
+
+.btn-shell {
+  border-radius: 4px;
+  border: 1px solid var(--border-technical);
+  background: color-mix(in oklab, var(--bg-elevated) 84%, transparent);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-shell:hover {
+  border-color: var(--primary);
+  color: var(--text-primary);
+}
+
+.btn-shell-primary {
+  background: var(--primary-dim);
+  border-color: var(--primary-glow);
+  color: var(--primary-strong);
+}
+
+.btn-shell-accent {
+  background: var(--accent-cyan-dim);
+  border-color: color-mix(in oklab, var(--accent-cyan) 45%, transparent);
+  color: var(--accent-cyan);
+}
+
+.action-icon-btn,
+.topbar-btn,
+.btn-shell,
+.react-flow__controls button {
+  border-radius: 10px !important;
+}
+
+.action-icon-btn svg,
+.topbar-btn svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  flex-shrink: 0;
 }
 
 /* ══════════════════════════════════════════════════
@@ -276,8 +368,8 @@ body::after {
 .react-flow__controls button {
   background: transparent !important;
   border-bottom: 1px solid var(--border-technical) !important;
-  color: var(--text-secondary) !important;
-  fill: var(--text-secondary) !important;
+  color: var(--primary-strong) !important;
+  fill: var(--primary-strong) !important;
 }
 
 .react-flow__controls button:hover {
@@ -305,12 +397,12 @@ body::after {
   background: transparent;
 }
 
-::webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--border-technical);
   border-radius: 0;
 }
 
-::webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
 
