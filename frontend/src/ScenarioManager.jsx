@@ -108,7 +108,7 @@ export default function ScenarioManager({
             width: '320px',
             background: 'var(--bg-base)',
             border: '1px solid var(--border-technical)',
-            borderRadius: '4px',
+            borderRadius: '12px',
             boxShadow: 'var(--shadow-node)',
             zIndex: 40,
             display: 'flex',
@@ -162,7 +162,7 @@ export default function ScenarioManager({
                 <div style={{
                     background: 'rgba(15, 23, 38, 0.72)',
                     border: '1px solid rgba(100, 160, 220, 0.15)',
-                    borderRadius: '2px',
+                    borderRadius: '8px',
                     padding: '8px',
                     marginBottom: '12px',
                 }}>
@@ -174,7 +174,7 @@ export default function ScenarioManager({
                                 background: 'var(--primary)',
                                 color: '#fff',
                                 border: '1px solid var(--primary-glow)',
-                                borderRadius: '2px',
+                                borderRadius: '8px',
                                 padding: '4px 8px',
                                 fontSize: '9px',
                                 fontWeight: 800,
@@ -191,7 +191,7 @@ export default function ScenarioManager({
                                 background: (!hasCompiledGraph || isRunning) ? 'rgba(100,160,220,0.06)' : 'rgba(16,185,129,0.14)',
                                 color: (!hasCompiledGraph || isRunning) ? '#64748b' : '#6ee7b7',
                                 border: `1px solid ${(!hasCompiledGraph || isRunning) ? 'rgba(100,160,220,0.18)' : 'rgba(16,185,129,0.35)'}`,
-                                borderRadius: '2px',
+                                borderRadius: '8px',
                                 padding: '4px 8px',
                                 fontSize: '9px',
                                 fontWeight: 800,
@@ -208,7 +208,7 @@ export default function ScenarioManager({
                                 background: (!hasCompiledGraph || isRunning) ? 'rgba(100,160,220,0.06)' : 'rgba(14,165,233,0.12)',
                                 color: (!hasCompiledGraph || isRunning) ? '#64748b' : '#7dd3fc',
                                 border: `1px solid ${(!hasCompiledGraph || isRunning) ? 'rgba(100,160,220,0.18)' : 'rgba(14,165,233,0.30)'}`,
-                                borderRadius: '2px',
+                                borderRadius: '8px',
                                 padding: '4px 8px',
                                 fontSize: '9px',
                                 fontWeight: 800,
@@ -224,7 +224,7 @@ export default function ScenarioManager({
                                 background: 'rgba(100,160,220,0.09)',
                                 color: '#c5d5e8',
                                 border: '1px solid rgba(100,160,220,0.25)',
-                                borderRadius: '2px',
+                                borderRadius: '8px',
                                 padding: '4px 8px',
                                 fontSize: '9px',
                                 fontWeight: 700,
@@ -240,7 +240,7 @@ export default function ScenarioManager({
                                 background: 'rgba(167,139,250,0.12)',
                                 color: '#c4b5fd',
                                 border: '1px solid rgba(167,139,250,0.30)',
-                                borderRadius: '2px',
+                                borderRadius: '8px',
                                 padding: '4px 8px',
                                 fontSize: '9px',
                                 fontWeight: 700,
@@ -260,7 +260,7 @@ export default function ScenarioManager({
                 <div style={{
                     background: 'var(--primary-dim)',
                     border: '1px solid var(--primary-glow)',
-                    borderRadius: '2px',
+                    borderRadius: '8px',
                     padding: '8px 10px',
                     marginBottom: '16px'
                 }}>
@@ -295,7 +295,7 @@ export default function ScenarioManager({
                                     style={{
                                         background: isSelected ? 'var(--primary-dim)' : 'rgba(255,255,255,0.01)',
                                         border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--border-technical)'}`,
-                                        borderRadius: '2px',
+                                        borderRadius: '8px',
                                         padding: '8px 10px',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -304,7 +304,7 @@ export default function ScenarioManager({
                                         transition: 'all 0.1s'
                                     }}>
                                     <div style={{
-                                        width: '18px', height: '18px', borderRadius: '1px',
+                                        width: '18px', height: '18px', borderRadius: '6px',
                                         background: isSelected ? 'var(--primary)' : 'var(--bg-elevated)',
                                         color: isSelected ? '#fff' : 'var(--text-muted)',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -325,14 +325,14 @@ export default function ScenarioManager({
                                         color: status.color,
                                         background: status.bg,
                                         padding: '1px 5px',
-                                        borderRadius: '1px',
+                                        borderRadius: '6px',
                                         border: `1px solid ${status.border}`,
                                         fontWeight: 'bold',
                                     }}>{status.label}</span>
                                     <button onClick={(e) => { e.stopPropagation(); handleToggleScenarioActive(scenario.id); }}
                                         style={{
                                             background: 'transparent', border: '1px solid rgba(100,160,220,0.25)', color: '#93c5fd',
-                                            cursor: 'pointer', padding: '1px 4px', fontSize: '7px', fontWeight: 'bold', borderRadius: '1px'
+                                            cursor: 'pointer', padding: '1px 4px', fontSize: '7px', fontWeight: 'bold', borderRadius: '6px'
                                         }}
                                     >
                                         {scenario.isActive ? 'ON' : 'OFF'}
@@ -340,7 +340,7 @@ export default function ScenarioManager({
                                     <button onClick={(e) => { e.stopPropagation(); handleDuplicateScenario(scenario.id); }}
                                         style={{
                                             background: 'transparent', border: '1px solid rgba(100,160,220,0.25)', color: '#c5d5e8',
-                                            cursor: 'pointer', padding: '1px 4px', fontSize: '7px', fontWeight: 'bold', borderRadius: '1px'
+                                            cursor: 'pointer', padding: '1px 4px', fontSize: '7px', fontWeight: 'bold', borderRadius: '6px'
                                         }}
                                     >
                                         CPY
@@ -363,7 +363,7 @@ export default function ScenarioManager({
                 <form onSubmit={handleAddScenario} className="mt-auto" style={{
                     background: 'rgba(0,0,0,0.3)',
                     padding: '10px',
-                    borderRadius: '2px',
+                    borderRadius: '8px',
                     border: '1px solid var(--border-technical)'
                 }}>
                     <p style={{ fontSize: '8px', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 'bold' }}>NEW_EXPERIMENT_SCENARIO</p>
@@ -377,7 +377,7 @@ export default function ScenarioManager({
                                 flex: 1,
                                 background: 'var(--bg-surface)',
                                 border: '1px solid var(--border-technical)',
-                                borderRadius: '1px',
+                                borderRadius: '6px',
                                 padding: '6px 10px',
                                 color: 'var(--text-primary)',
                                 fontSize: '11px',
@@ -387,7 +387,7 @@ export default function ScenarioManager({
                         />
                         <button type="submit" style={{
                             background: 'var(--primary)', cursor: 'pointer',
-                            color: 'white', border: 'none', borderRadius: '1px',
+                            color: 'white', border: 'none', borderRadius: '6px',
                             padding: '0 12px', fontSize: '10px', fontWeight: 'bold',
                             textTransform: 'uppercase'
                         }}>

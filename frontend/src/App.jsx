@@ -99,6 +99,8 @@ const topActionBtnBase = {
   letterSpacing: '0.08em',
   fontFamily: "var(--font-body)",
 };
+const popupMenuRadius = "10px";
+const sidePanelRadius = "12px";
 
 const makeNodeInputKey = (nodeId, inputName) => `${nodeId}::${inputName}`;
 
@@ -1672,18 +1674,10 @@ function Flow() {
       <div class="report-wrap">
         <style>
           .report-wrap {
-            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
             color: #d8e4f5;
             background: linear-gradient(180deg, #0b1118 0%, #0f1824 100%);
             padding: 18px 24px 24px;
-            line-height: 1.35;
-          }
-          .report-wrap, .report-wrap * {
-            box-sizing: border-box;
-          }
-          .report-wrap h1, .report-wrap h2, .report-wrap h3, .report-wrap h4, .report-wrap h5,
-          .report-wrap p, .report-wrap table {
-            margin: 0;
           }
           .hero {
             border: 1px solid rgba(50, 184, 255, 0.35);
@@ -1695,8 +1689,6 @@ function Flow() {
           .pdf-block {
             width: 100%;
             box-sizing: border-box;
-            display: block;
-            overflow: hidden;
             break-inside: avoid;
             page-break-inside: avoid;
           }
@@ -1752,13 +1744,13 @@ function Flow() {
             font-size: 8px;
             font-weight: 600;
             text-anchor: middle;
-            font-family: "Consolas", "Menlo", "SFMono-Regular", monospace;
+            font-family: "JetBrains Mono", "Fira Code", "Consolas", "SFMono-Regular", monospace;
           }
           .flow-node-label {
             fill: #f0f7ff;
             font-size: 8px;
             font-weight: 700;
-            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
           }
           h3 { margin: 0 0 4px 0; font-size: 12px; color: #ecf6ff; }
           h4 { margin: 0 0 7px 0; font-size: 11px; color: #9cd3ff; }
@@ -1844,7 +1836,7 @@ function Flow() {
           .tok-num { color: #ffffff; font-weight: 700; }
           .tok-op { color: #ff8a3d; font-weight: 700; }
           .tok-fn { color: #f8d180; font-weight: 700; }
-          .mono { font-family: "Consolas", "Menlo", "SFMono-Regular", monospace; }
+          .mono { font-family: "JetBrains Mono", "Fira Code", "Consolas", "SFMono-Regular", monospace; }
           .clean-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
           .clean-table th, .clean-table td {
             border: 1px solid rgba(78, 112, 148, 0.45);
@@ -2011,10 +2003,9 @@ function Flow() {
 
       let yCursor = marginY;
       drawPageBackground();
-      const blockGap = 2;
+      const blockGap = 4;
       const minRenderableSpacePt = 24;
       const layerKeepTogetherLimitPt = contentHeight * 0.82;
-      const renderScale = Math.min(2, Math.max(1.4, window.devicePixelRatio || 1));
 
       const renderCanvasSliced = (canvas) => {
         let consumedPx = 0;
@@ -2052,7 +2043,7 @@ function Flow() {
         }
 
         const blockCanvas = await html2canvas(block, {
-          scale: renderScale,
+          scale: 2,
           useCORS: true,
           backgroundColor: "#0b1118",
           logging: false,
@@ -2791,7 +2782,7 @@ function Flow() {
                       minWidth: '132px',
                       background: 'var(--bg-card)',
                       border: '1px solid var(--border-technical)',
-                      borderRadius: '4px',
+                      borderRadius: popupMenuRadius,
                       boxShadow: 'var(--shadow-node)',
                       overflow: 'hidden',
                       zIndex: 80,
@@ -2885,7 +2876,7 @@ function Flow() {
                       minWidth: '124px',
                       background: 'var(--bg-card)',
                       border: '1px solid var(--border-technical)',
-                      borderRadius: '4px',
+                      borderRadius: popupMenuRadius,
                       boxShadow: 'var(--shadow-node)',
                       overflow: 'hidden',
                       zIndex: 80,
@@ -3024,6 +3015,8 @@ function Flow() {
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid var(--border-subtle)',
+                  borderTopLeftRadius: sidePanelRadius,
+                  borderBottomLeftRadius: sidePanelRadius,
                   boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.3)',
                 }}>
                 <div className="flex items-center justify-between px-4 py-3.5 shrink-0"
@@ -3058,6 +3051,8 @@ function Flow() {
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid var(--border-subtle)',
+                  borderTopLeftRadius: sidePanelRadius,
+                  borderBottomLeftRadius: sidePanelRadius,
                   boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.3)',
                 }}>
                 {/* Panel Header */}
