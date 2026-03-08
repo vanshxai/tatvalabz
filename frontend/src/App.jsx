@@ -238,6 +238,7 @@ function Flow() {
   // Snapshot stores only structural keys (node ids + edge connections)
   // NOT positions — React Flow adjusts positions on load (fitView), causing false positives
   const lastSavedSnapshot = useRef({ nodeIds: '', edgeKeys: '' });
+  const autoSaveTimeoutRef = useRef(null);
 
   const makeSnapshotKeys = useCallback((nodeList, edgeList) => {
     const nodeIds = nodeList.map(n => n.id).sort().join(',');
@@ -257,10 +258,6 @@ function Flow() {
     if (!currentProjectId) return true;
     return hasUnsavedChanges();
   }, [nodes.length, edges.length, currentProjectId, hasUnsavedChanges]);
-
-  const updateSnapshot = useCallback(() => {
-    lastSavedSnapshot.current = makeSnapshotKeys(nodes, edges);
-  }, [nodes, edges, makeSnapshotKeys]);
 
   // ── Saved Projects (localStorage) ──
   const STORAGE_KEY = "faulter_saved_projects";
@@ -563,7 +560,7 @@ function Flow() {
 
   // ── Cloud Sync Logic ──
   // ── Cloud Sync Logic ──
-  const syncToCloud = async (project) => {
+  const syncToCloud = useCallback(async (project) => {
     try {
       const { data, error } = await supabase
         .from('workspaces')
@@ -584,7 +581,28 @@ function Flow() {
       setTimeout(() => setSyncStatus("idle"), 2000);
       // Fail silently in UI to preserve "Local First" experience
     }
-  };
+  }, []);
+
+  const buildProjectSnapshot = useCallback((projectId, projectName) => ({
+    id: projectId,
+    name: projectName,
+    nodes: structuredClone(nodes),
+    edges: structuredClone(edges),
+    scenarios: structuredClone(scenarios),
+    executionRecords: structuredClone(executionRecords),
+    backendResult: backendResult ? structuredClone(backendResult) : null,
+    savedAt: new Date().toISOString(),
+  }), [nodes, edges, scenarios, executionRecords, backendResult]);
+
+  const persistProjectSnapshot = useCallback((project, { syncCloud = true } = {}) => {
+    setSavedProjects((prev) => {
+      const exists = prev.some((p) => p.id === project.id);
+      if (!exists) return [project, ...prev];
+      return prev.map((p) => (p.id === project.id ? project : p));
+    });
+    lastSavedSnapshot.current = makeSnapshotKeys(project.nodes, project.edges);
+    if (syncCloud) syncToCloud(project);
+  }, [makeSnapshotKeys, syncToCloud]);
 
   // ── Auto-Save (Ghost Save) ──
   useEffect(() => {
@@ -597,59 +615,44 @@ function Flow() {
     }
 
     setSyncStatus("syncing");
-    const timeoutId = setTimeout(() => {
-      const updatedProject = {
-        id: currentProjectId,
-        name: currentProjectName,
-        nodes: structuredClone(nodes),
-        edges: structuredClone(edges),
-        scenarios: structuredClone(scenarios),
-        executionRecords: structuredClone(executionRecords),
-        backendResult: backendResult ? structuredClone(backendResult) : null,
-        savedAt: new Date().toISOString(),
-      };
-
-      // 1. Update localStorage instantly
-      setSavedProjects((prev) =>
-        prev.map((p) => (p.id === currentProjectId ? updatedProject : p))
-      );
-      updateSnapshot();
-
-      // 2. Background Cloud Sync
-      syncToCloud(updatedProject);
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      const updatedProject = buildProjectSnapshot(currentProjectId, currentProjectName);
+      persistProjectSnapshot(updatedProject);
+      autoSaveTimeoutRef.current = null;
     }, 1500); // 1.5s debounce
 
-    return () => clearTimeout(timeoutId);
-  }, [nodes, edges, scenarios, executionRecords, backendResult, currentProjectId, currentProjectName, isStarted]);
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
+    };
+  }, [currentProjectId, currentProjectName, isStarted, hasUnsavedChanges, backendResult, scenarios, buildProjectSnapshot, persistProjectSnapshot]);
 
 
   const handleSaveProject = async () => {
-    // With Auto-Save, this manual button is mostly for creating the *first* project
+    // If project already exists, force an immediate save (flush pending auto-save)
     if (currentProjectId) {
-      showToast(`✅ "${currentProjectName}" is already auto-saving!`, "success");
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
+      setSyncStatus("syncing");
+      const updatedProject = buildProjectSnapshot(currentProjectId, currentProjectName);
+      persistProjectSnapshot(updatedProject);
+      showToast(`✅ Saved "${updatedProject.name}"`, "success");
       return true;
     }
 
     // Brand-new workflow → prompt for a name
     const name = await customPrompt('Save Project', 'Enter a name for this project:');
     if (!name || !name.trim()) return false;
-    const project = {
-      id: Date.now().toString(), name: name.trim(),
-      nodes: structuredClone(nodes),
-      edges: structuredClone(edges),
-      scenarios: structuredClone(scenarios),
-      executionRecords: structuredClone(executionRecords),
-      backendResult: backendResult ? structuredClone(backendResult) : null,
-      savedAt: new Date().toISOString(),
-    };
-    setSavedProjects((prev) => [project, ...prev]);
+    const project = buildProjectSnapshot(Date.now().toString(), name.trim());
     // Now track this as the active project
     setCurrentProjectId(project.id);
     setCurrentProjectName(project.name);
-    updateSnapshot();
-
-    // Background Cloud Sync
-    syncToCloud(project);
+    persistProjectSnapshot(project);
 
     showToast(`✅ Project "${project.name}" created!`, "success");
     return true;
@@ -1815,14 +1818,13 @@ function Flow() {
                           <button
                             className="topbar-btn"
                             onClick={handleSaveProject}
-                            disabled={!!currentProjectId}
                             style={{
                               display: 'flex', alignItems: 'center', gap: '6px',
-                              opacity: currentProjectId ? 0.5 : 1,
-                              cursor: currentProjectId ? 'default' : 'pointer'
+                              opacity: 1,
+                              cursor: 'pointer'
                             }}
                           >
-                            <span>{currentProjectId ? 'AUTO-SAVING' : 'SAVE AS'}</span>
+                            <span>{currentProjectId ? 'SAVE NOW' : 'SAVE AS'}</span>
                           </button>
                           {/* Solve button */}
                           <button onClick={handleSolve} disabled={loading}
