@@ -239,6 +239,7 @@ function Flow() {
   // NOT positions — React Flow adjusts positions on load (fitView), causing false positives
   const lastSavedSnapshot = useRef({ nodeIds: '', edgeKeys: '' });
   const autoSaveTimeoutRef = useRef(null);
+  const AUTO_SAVE_IDLE_MS = 4000;
 
   const makeSnapshotKeys = useCallback((nodeList, edgeList) => {
     const nodeIds = nodeList.map(n => n.id).sort().join(',');
@@ -250,6 +251,12 @@ function Flow() {
     const snap = lastSavedSnapshot.current;
     const curr = makeSnapshotKeys(nodes, edges);
     return snap.nodeIds !== curr.nodeIds || snap.edgeKeys !== curr.edgeKeys;
+  }, [nodes, edges, makeSnapshotKeys]);
+
+  // Track only workflow structure edits for inactivity-based autosave.
+  const workflowStructureKey = useMemo(() => {
+    const { nodeIds, edgeKeys } = makeSnapshotKeys(nodes, edges);
+    return `${nodeIds}||${edgeKeys}`;
   }, [nodes, edges, makeSnapshotKeys]);
 
   const hasPotentialDataLoss = useCallback(() => {
@@ -601,23 +608,20 @@ function Flow() {
     if (syncCloud) syncToCloud(project);
   }, [makeSnapshotKeys, syncToCloud]);
 
-  // ── Auto-Save (Ghost Save) ──
+  // ── Idle Auto-Save ──
   useEffect(() => {
-    if (!currentProjectId || !isStarted) return;
+    if (!currentProjectId || !isStarted || !hasUnsavedChanges()) return;
 
-    // Check if there are structural changes or result changes worth saving
-    if (!hasUnsavedChanges() && !backendResult && scenarios.length === 1 && Object.keys(scenarios[0].sweeps).length === 0) {
-      // Avoid aggressive saving when just clicking around an empty default project
-      // But if scenarios or results exist, we should sync them.
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
     }
 
-    setSyncStatus("syncing");
-    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
     autoSaveTimeoutRef.current = setTimeout(() => {
+      setSyncStatus("syncing");
       const updatedProject = buildProjectSnapshot(currentProjectId, currentProjectName);
       persistProjectSnapshot(updatedProject);
       autoSaveTimeoutRef.current = null;
-    }, 1500); // 1.5s debounce
+    }, AUTO_SAVE_IDLE_MS);
 
     return () => {
       if (autoSaveTimeoutRef.current) {
@@ -625,7 +629,16 @@ function Flow() {
         autoSaveTimeoutRef.current = null;
       }
     };
-  }, [currentProjectId, currentProjectName, isStarted, hasUnsavedChanges, backendResult, scenarios, buildProjectSnapshot, persistProjectSnapshot]);
+  }, [
+    currentProjectId,
+    currentProjectName,
+    isStarted,
+    workflowStructureKey,
+    hasUnsavedChanges,
+    buildProjectSnapshot,
+    persistProjectSnapshot,
+    AUTO_SAVE_IDLE_MS,
+  ]);
 
 
   const handleSaveProject = async () => {
