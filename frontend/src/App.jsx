@@ -1024,42 +1024,276 @@ function Flow() {
   }, []);
 
   const handleExportCsv = useCallback(async () => {
-    const rows = [["section", "key", "value"]];
+    const rows = [["section", "group", "metric", "value"]];
     const timestampIso = new Date().toISOString();
+    const addRow = (section, group, metric, value) => {
+      rows.push([section, group, metric, value ?? ""]);
+    };
+    const scrubNodeIds = (raw) => String(raw ?? "").replace(/\bnode[_\s-]*\d+\b/gi, "Component");
+    const prettyLabel = (raw) =>
+      scrubNodeIds(String(raw || ""))
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (m) => m.toUpperCase());
+    const toPrecise = (value) => {
+      if (value === undefined) return "undefined";
+      if (value === null) return "null";
+      if (typeof value === "number") {
+        if (Number.isNaN(value)) return "NaN";
+        if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+        return Number(value).toPrecision(17);
+      }
+      if (typeof value === "string") return value;
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    rows.push(["meta", "project_name", currentProjectName || "Untitled workflow"]);
-    rows.push(["meta", "exported_at", timestampIso]);
-    rows.push(["meta", "node_count", String(nodes.length)]);
-    rows.push(["meta", "edge_count", String(edges.length)]);
-    rows.push(["meta", "scenario_count", String(scenarios.length)]);
-    rows.push(["meta", "execution_record_count", String(executionRecords.length)]);
+    const compiledNodes = Array.isArray(compiledJson?.nodes) ? compiledJson.nodes : [];
+    const nodeById = new Map(compiledNodes.map((node) => [node.id, node]));
+    const uiNodeById = new Map(nodes.map((node) => [node.id, node]));
+
+    if (compiledNodes.length === 0) {
+      nodes.forEach((node) => {
+        nodeById.set(node.id, {
+          id: node.id,
+          label: node?.data?.label || node?.data?.name || "Unnamed Component",
+          formulas: node?.data?.formulas || {},
+          inputs_mapped: node?.data?.inputs_mapped || {},
+          execution_layer: 0,
+        });
+      });
+    }
+
+    const sortedNodeIds = [...new Set([...nodeById.keys()])].sort((a, b) => b.length - a.length);
+
+    const getNodeName = (nodeId) => {
+      const compiled = nodeById.get(nodeId);
+      const ui = uiNodeById.get(nodeId);
+      const rawLabel =
+        compiled?.label ||
+        compiled?.name ||
+        ui?.data?.label ||
+        ui?.data?.name ||
+        "Unnamed Component";
+      return prettyLabel(rawLabel);
+    };
+
+    const getNodeDescription = (nodeId, nodeObj = null) => {
+      const uiNode = uiNodeById.get(nodeId);
+      const candidates = [
+        nodeObj?.description,
+        nodeObj?.desc,
+        uiNode?.data?.description,
+        uiNode?.data?.desc,
+        uiNode?.data?.notes,
+        uiNode?.data?.summary,
+      ];
+      const found = candidates.find((item) => typeof item === "string" && item.trim());
+      return found ? found.trim() : "";
+    };
+
+    const parseSourceRef = (sourceRef) => {
+      if (!sourceRef) return null;
+      for (const nodeId of sortedNodeIds) {
+        const prefix = `${nodeId}_`;
+        if (sourceRef.startsWith(prefix)) {
+          return { nodeId, outputName: sourceRef.slice(prefix.length) };
+        }
+      }
+      return null;
+    };
+
+    const prettySource = (source) => {
+      if (!source) return "Unresolved fallback";
+      if (source.startsWith("mapped:")) {
+        const right = source.replace("mapped:", "");
+        const [nodeId, output] = right.split(".");
+        return `Mapped from ${getNodeName(nodeId)} -> ${prettyLabel(output)}`;
+      }
+      if (source.startsWith("global:")) return `Global constant (${prettyLabel(source.replace("global:", ""))})`;
+      if (source.startsWith("local:")) {
+        const right = source.replace("local:", "");
+        const [nodeId, outputName] = right.split(".");
+        return `Local output (${getNodeName(nodeId)} -> ${prettyLabel(outputName)})`;
+      }
+      if (source.startsWith("scoped:")) {
+        const right = source.replace("scoped:", "");
+        const [nodeId, outputName] = right.includes("__") ? right.split("__") : right.split("_");
+        if (nodeId) return `Scoped value (${getNodeName(nodeId)} -> ${prettyLabel(outputName)})`;
+        return `Scoped system value (${prettyLabel(right)})`;
+      }
+      return prettyLabel(source);
+    };
+
+    const layerToNodeIds = new Map();
+    if (Array.isArray(compiledJson?.execution_batches) && compiledJson.execution_batches.length > 0) {
+      compiledJson.execution_batches.forEach((batch) => {
+        const layer = Number(batch.layer ?? 0);
+        const ids = Array.isArray(batch.node_ids) ? batch.node_ids : [];
+        if (!layerToNodeIds.has(layer)) layerToNodeIds.set(layer, []);
+        layerToNodeIds.get(layer).push(...ids);
+      });
+    } else if (compiledNodes.length > 0) {
+      compiledNodes.forEach((node) => {
+        const layer = Number(node.execution_layer ?? 0);
+        if (!layerToNodeIds.has(layer)) layerToNodeIds.set(layer, []);
+        layerToNodeIds.get(layer).push(node.id);
+      });
+    } else if (nodes.length > 0) {
+      layerToNodeIds.set(0, nodes.map((n) => n.id));
+    }
+    const nodeLayerById = new Map();
+    [...layerToNodeIds.keys()].sort((a, b) => a - b).forEach((layer) => {
+      Array.from(new Set(layerToNodeIds.get(layer) || [])).forEach((nodeId) => {
+        nodeLayerById.set(nodeId, layer);
+      });
+    });
+    const getLayer = (nodeId) => nodeLayerById.get(nodeId) ?? 0;
+
+    const humanizeSystemField = (key) => {
+      let value = String(key || "");
+      sortedNodeIds.forEach((nodeId) => {
+        const rx = new RegExp(`\\b${escapeRegExp(nodeId)}\\b`, "g");
+        value = value.replace(rx, getNodeName(nodeId));
+      });
+      return prettyLabel(value);
+    };
+
+    addRow("meta", "Workflow", "Project Name", currentProjectName || "Untitled workflow");
+    addRow("meta", "Workflow", "Exported At", timestampIso);
+    addRow("meta", "Workflow", "Component Count", String(nodes.length));
+    addRow("meta", "Workflow", "Connection Count", String(edges.length));
+    addRow("meta", "Workflow", "Scenario Count", String(scenarios.length));
+    addRow("meta", "Workflow", "Execution Records", String(executionRecords.length));
 
     nodes.forEach((node, index) => {
-      rows.push(["node", `${index + 1}.id`, node.id]);
-      rows.push(["node", `${index + 1}.label`, node?.data?.label || node.id]);
-      rows.push(["node", `${index + 1}.type`, node.type || "customNode"]);
-      rows.push(["node", `${index + 1}.x`, String(node?.position?.x ?? "")]);
-      rows.push(["node", `${index + 1}.y`, String(node?.position?.y ?? "")]);
+      const name = getNodeName(node.id);
+      const desc = getNodeDescription(node.id, node);
+      addRow("component", `Layer ${getLayer(node.id)}`, `Component ${index + 1}`, name);
+      if (desc) addRow("component", name, "Description", desc);
+      addRow("component", name, "Type", prettyLabel(node.type || "customNode"));
     });
 
     edges.forEach((edge, index) => {
-      rows.push(["edge", `${index + 1}.id`, edge.id]);
-      rows.push(["edge", `${index + 1}.source`, edge.source]);
-      rows.push(["edge", `${index + 1}.target`, edge.target]);
-      rows.push(["edge", `${index + 1}.source_handle`, edge.sourceHandle || ""]);
-      rows.push(["edge", `${index + 1}.target_handle`, edge.targetHandle || ""]);
+      const sourceName = getNodeName(edge.source);
+      const targetName = getNodeName(edge.target);
+      addRow("connection", `Link ${index + 1}`, "From", sourceName);
+      addRow("connection", `Link ${index + 1}`, "To", targetName);
+      if (edge.sourceHandle || edge.targetHandle) {
+        addRow(
+          "connection",
+          `Link ${index + 1}`,
+          "Signal",
+          `${prettyLabel(edge.sourceHandle || "out")} -> ${prettyLabel(edge.targetHandle || "in")}`
+        );
+      }
     });
 
     scenarios.forEach((scenario, index) => {
-      rows.push(["scenario", `${index + 1}.id`, scenario.id || `scenario_${index + 1}`]);
-      rows.push(["scenario", `${index + 1}.name`, scenario.name || `Scenario ${index + 1}`]);
-      rows.push(["scenario", `${index + 1}.active`, String(Boolean(scenario.isActive))]);
-      rows.push(["scenario", `${index + 1}.sweeps`, JSON.stringify(scenario.sweeps || {})]);
+      const scenarioName = scenario.name || `Scenario ${index + 1}`;
+      addRow("scenario", scenarioName, "Active", String(Boolean(scenario.isActive)));
+      if (scenario.sweeps && Object.keys(scenario.sweeps).length > 0) {
+        const sweepSummary = Object.entries(scenario.sweeps)
+          .map(([key, value]) => `${humanizeSystemField(key)}=${toPrecise(value)}`)
+          .join(" | ");
+        addRow("scenario", scenarioName, "Sweep Config", sweepSummary || "Configured");
+      }
     });
 
-    const systemState = backendResult?.system_state || {};
-    Object.entries(systemState).forEach(([key, value]) => {
-      rows.push(["system_state", key, String(value)]);
+    [...nodeById.entries()]
+      .sort((a, b) => getLayer(a[0]) - getLayer(b[0]) || getNodeName(a[0]).localeCompare(getNodeName(b[0])))
+      .forEach(([nodeId, nodeObj]) => {
+        const nodeName = getNodeName(nodeId);
+        const layer = getLayer(nodeId);
+        const formulas = Object.entries(nodeObj?.formulas || {});
+        const inputsMapped = nodeObj?.inputs_mapped || {};
+        formulas.forEach(([outputName, formula]) => {
+          addRow("formula", `${nodeName} (Layer ${layer})`, prettyLabel(outputName), String(formula || ""));
+        });
+        Object.entries(inputsMapped).forEach(([varName, sourceRef]) => {
+          const parsed = parseSourceRef(sourceRef);
+          const sourceName = parsed
+            ? prettySource(`mapped:${parsed.nodeId}.${parsed.outputName}`)
+            : humanizeSystemField(sourceRef);
+          addRow("source_map", `${nodeName} (Layer ${layer})`, prettyLabel(varName), sourceName);
+        });
+      });
+
+    const buildVariants = () => {
+      const variants = [];
+      if (backendResult?.node_outputs || backendResult?.system_state) {
+        variants.push({
+          label: "Baseline Run",
+          sweepSummary: "",
+          nodeOutputs: backendResult?.node_outputs || {},
+          systemState: backendResult?.system_state || {},
+        });
+      }
+      const scenarioResults = Array.isArray(backendResult?.scenario_results) ? backendResult.scenario_results : [];
+      scenarioResults.forEach((scenario) => {
+        const outputsList = Array.isArray(scenario?.data_points) ? scenario.data_points : [];
+        const stateList = Array.isArray(scenario?.system_states) ? scenario.system_states : [];
+        const sweepVars = Array.isArray(scenario?.sweep_variables) ? scenario.sweep_variables : [];
+        const sweepValues = Array.isArray(scenario?.sweep_values) ? scenario.sweep_values : [];
+        outputsList.forEach((nodeOutputs, idx) => {
+          const runVals = sweepValues[idx];
+          const sweepSummary = Array.isArray(runVals)
+            ? sweepVars.map((name, i) => `${prettyLabel(name)}=${toPrecise(runVals[i])}`).join(" | ")
+            : "";
+          variants.push({
+            label: `${scenario?.scenario_name || "Scenario"} - Iteration ${idx + 1}/${outputsList.length || 1}`,
+            sweepSummary,
+            nodeOutputs: nodeOutputs || {},
+            systemState: stateList[idx] || {},
+          });
+        });
+      });
+      if (!scenarioResults.length && Array.isArray(backendResult?.data_points)) {
+        const outputsList = backendResult.data_points;
+        const stateList = Array.isArray(backendResult?.system_states) ? backendResult.system_states : [];
+        outputsList.forEach((nodeOutputs, idx) => {
+          variants.push({
+            label: `Sweep Iteration ${idx + 1}/${outputsList.length || 1}`,
+            sweepSummary: "",
+            nodeOutputs: nodeOutputs || {},
+            systemState: stateList[idx] || {},
+          });
+        });
+      }
+      return variants;
+    };
+
+    const variants = buildVariants();
+    variants.forEach((variant) => {
+      addRow("run", variant.label, "Sweep Inputs", variant.sweepSummary || "-");
+
+      const nodeResultRows = [];
+      Object.entries(variant.nodeOutputs || {}).forEach(([nodeId, outputs]) => {
+        Object.entries(outputs || {}).forEach(([outputName, value]) => {
+          nodeResultRows.push({
+            layer: getLayer(nodeId),
+            nodeName: getNodeName(nodeId),
+            metric: prettyLabel(outputName),
+            value: toPrecise(value),
+          });
+        });
+      });
+      nodeResultRows
+        .sort((a, b) => a.layer - b.layer || a.nodeName.localeCompare(b.nodeName) || a.metric.localeCompare(b.metric))
+        .forEach((row) => {
+          addRow("node_result", `${variant.label} | ${row.nodeName} (Layer ${row.layer})`, row.metric, row.value);
+        });
+
+      Object.entries(variant.systemState || {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([key, value]) => {
+          addRow("system_result", variant.label, humanizeSystemField(key), toPrecise(value));
+        });
     });
 
     const csv = rows
@@ -1078,7 +1312,7 @@ function Flow() {
     downloadTextFile(csv, fileName, "text/csv;charset=utf-8;");
     setShowExportMenu(false);
     showToast(`CSV downloaded: ${fileName}`, "success");
-  }, [currentProjectName, nodes, edges, scenarios, executionRecords.length, backendResult, getExportFileBaseName, sanitizeExportName, downloadTextFile, showToast]);
+  }, [currentProjectName, nodes, edges, scenarios, executionRecords.length, backendResult, compiledJson, getExportFileBaseName, sanitizeExportName, downloadTextFile, showToast]);
 
   const handleExportPdf = useCallback(async () => {
     if (isPdfExporting) return;
@@ -1882,6 +2116,10 @@ function Flow() {
         doc.setFillColor(11, 17, 24);
         doc.rect(0, 0, pageWidth, pageHeight, "F");
       };
+      const addNewPage = () => {
+        doc.addPage();
+        drawPageBackground();
+      };
       const sliceCanvas = (canvas, fromY, height) => {
         const piece = document.createElement("canvas");
         piece.width = canvas.width;
@@ -1920,12 +2158,42 @@ function Flow() {
 
       let yCursor = marginY;
       drawPageBackground();
-      const blockGap = 6;
+      const blockGap = 4;
+      const minRenderableSpacePt = 24;
+      const layerKeepTogetherLimitPt = contentHeight * 0.82;
+
+      const renderCanvasSliced = (canvas) => {
+        let consumedPx = 0;
+        while (consumedPx < canvas.height) {
+          const spaceLeftPt = pageHeight - marginY - yCursor;
+          if (spaceLeftPt < minRenderableSpacePt) {
+            addNewPage();
+            yCursor = marginY;
+          }
+
+          const usablePt = pageHeight - marginY - yCursor;
+          const sliceHeightPx = Math.max(1, Math.floor((usablePt * canvas.width) / contentWidth));
+          const remainPx = canvas.height - consumedPx;
+          const takePx = Math.min(sliceHeightPx, remainPx);
+          const piece = sliceCanvas(canvas, consumedPx, takePx);
+          const renderedHeightPt = (takePx * contentWidth) / canvas.width;
+          const pieceImage = piece.toDataURL("image/png", 1.0);
+          doc.addImage(pieceImage, "PNG", marginX, yCursor, contentWidth, renderedHeightPt, undefined, "FAST");
+          consumedPx += takePx;
+          yCursor += renderedHeightPt;
+
+          if (consumedPx < canvas.height) {
+            addNewPage();
+            yCursor = marginY;
+          } else {
+            yCursor += blockGap;
+          }
+        }
+      };
 
       for (const block of exportBlocks) {
         if (block.classList.contains("section-break") && yCursor !== marginY) {
-          doc.addPage();
-          drawPageBackground();
+          addNewPage();
           yCursor = marginY;
         }
 
@@ -1941,29 +2209,22 @@ function Flow() {
         const fullBlockHeightPt = (blockCanvas.height * contentWidth) / blockCanvas.width;
         const mustFitPage = block.classList.contains("must-fit-page");
         if (mustFitPage) {
-          if (yCursor !== marginY && fullBlockHeightPt > (pageHeight - marginY - yCursor)) {
-            doc.addPage();
-            drawPageBackground();
-            yCursor = marginY;
-          }
-
-          let renderWidthPt = contentWidth;
-          let renderHeightPt = fullBlockHeightPt;
-          let renderXPt = marginX;
-          if (fullBlockHeightPt > contentHeight) {
-            const fitScale = contentHeight / fullBlockHeightPt;
-            renderHeightPt = contentHeight;
-            renderWidthPt = contentWidth * fitScale;
-            renderXPt = marginX + ((contentWidth - renderWidthPt) / 2);
-          }
-
-          const blockImage = blockCanvas.toDataURL("image/png", 1.0);
-          doc.addImage(blockImage, "PNG", renderXPt, yCursor, renderWidthPt, renderHeightPt, undefined, "FAST");
-          yCursor += renderHeightPt + blockGap;
-          if (yCursor > pageHeight - marginY - 8) {
-            doc.addPage();
-            drawPageBackground();
-            yCursor = marginY;
+          const spaceLeftPt = pageHeight - marginY - yCursor;
+          const keepTogether = fullBlockHeightPt <= layerKeepTogetherLimitPt;
+          if (keepTogether) {
+            if (yCursor !== marginY && fullBlockHeightPt > spaceLeftPt) {
+              addNewPage();
+              yCursor = marginY;
+            }
+            const blockImage = blockCanvas.toDataURL("image/png", 1.0);
+            doc.addImage(blockImage, "PNG", marginX, yCursor, contentWidth, fullBlockHeightPt, undefined, "FAST");
+            yCursor += fullBlockHeightPt + blockGap;
+          } else {
+            if (yCursor !== marginY && spaceLeftPt < contentHeight * 0.32) {
+              addNewPage();
+              yCursor = marginY;
+            }
+            renderCanvasSliced(blockCanvas);
           }
           continue;
         }
@@ -1976,8 +2237,7 @@ function Flow() {
         }
 
         if (fullBlockHeightPt <= contentHeight) {
-          doc.addPage();
-          drawPageBackground();
+          addNewPage();
           yCursor = marginY;
           const blockImage = blockCanvas.toDataURL("image/png", 1.0);
           doc.addImage(blockImage, "PNG", marginX, yCursor, contentWidth, fullBlockHeightPt, undefined, "FAST");
@@ -1985,30 +2245,7 @@ function Flow() {
           continue;
         }
 
-        let consumedPx = 0;
-        while (consumedPx < blockCanvas.height) {
-          const spaceLeftPt = pageHeight - marginY - yCursor;
-          if (spaceLeftPt < 24) {
-            doc.addPage();
-            drawPageBackground();
-            yCursor = marginY;
-          }
-          const usablePt = pageHeight - marginY - yCursor;
-          const sliceHeightPx = Math.max(1, Math.floor((usablePt * blockCanvas.width) / contentWidth));
-          const remainPx = blockCanvas.height - consumedPx;
-          const takePx = Math.min(sliceHeightPx, remainPx);
-          const piece = sliceCanvas(blockCanvas, consumedPx, takePx);
-          const renderedHeightPt = (takePx * contentWidth) / blockCanvas.width;
-          const pieceImage = piece.toDataURL("image/png", 1.0);
-          doc.addImage(pieceImage, "PNG", marginX, yCursor, contentWidth, renderedHeightPt, undefined, "FAST");
-          consumedPx += takePx;
-          yCursor += renderedHeightPt + blockGap;
-          if (consumedPx < blockCanvas.height) {
-            doc.addPage();
-            drawPageBackground();
-            yCursor = marginY;
-          }
-        }
+        renderCanvasSliced(blockCanvas);
       }
 
       doc.save(fileName);
