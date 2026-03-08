@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from "react";
 
-export default function LandingPage({ onStart }) {
+export default function LandingPage({ onStart, onAuth }) {
     const [text, setText] = useState("");
     const [isDeleting, setIsDeleting] = useState(false);
     const [loopNum, setLoopNum] = useState(0);
@@ -118,7 +118,7 @@ export default function LandingPage({ onStart }) {
                     </span>
                 </div>
 
-                <button onClick={onStart}
+                <button onClick={() => onAuth?.("signup")}
                     style={{
                         padding: '10px 28px',
                         borderRadius: '16px',
@@ -136,7 +136,7 @@ export default function LandingPage({ onStart }) {
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'; e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.3)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'; }}
                 >
-                    Sign In
+                    Sign Up
                 </button>
             </nav>
 

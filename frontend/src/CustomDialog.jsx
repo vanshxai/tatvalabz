@@ -30,15 +30,28 @@ const CustomDialog = () => {
     const [config, setConfig] = useState(null);
     const [inputValue, setInputValue] = useState('');
     const inputRef = useRef(null);
+    const closeTimeoutRef = useRef(null);
+    const dialogIdRef = useRef(0);
 
     useEffect(() => {
         const handler = (e) => {
-            setConfig(e.detail);
+            if (closeTimeoutRef.current) {
+                clearTimeout(closeTimeoutRef.current);
+                closeTimeoutRef.current = null;
+            }
+            dialogIdRef.current += 1;
+            setConfig({ ...e.detail, __dialogId: dialogIdRef.current });
             setInputValue(e.detail.defaultValue || '');
             setIsOpen(true);
         };
         window.addEventListener('showCustomDialog', handler);
-        return () => window.removeEventListener('showCustomDialog', handler);
+        return () => {
+            window.removeEventListener('showCustomDialog', handler);
+            if (closeTimeoutRef.current) {
+                clearTimeout(closeTimeoutRef.current);
+                closeTimeoutRef.current = null;
+            }
+        };
     }, []);
 
     // Auto-focus input for prompts
@@ -49,14 +62,25 @@ const CustomDialog = () => {
     }, [isOpen, config]);
 
     const handleClose = (result) => {
+        const activeConfig = config;
         setIsOpen(false);
-        if (config?.resolve) {
-            config.resolve(result);
+        if (activeConfig?.resolve) {
+            activeConfig.resolve(result);
         }
-        setTimeout(() => setConfig(null), 200); // Wait for fade out
+        if (closeTimeoutRef.current) {
+            clearTimeout(closeTimeoutRef.current);
+        }
+        const activeDialogId = activeConfig?.__dialogId;
+        closeTimeoutRef.current = setTimeout(() => {
+            setConfig((currentConfig) => (
+                currentConfig?.__dialogId === activeDialogId ? null : currentConfig
+            ));
+            closeTimeoutRef.current = null;
+        }, 200); // Wait for fade out
     };
 
     const handleConfirm = () => {
+        if (!config) return;
         if (config.type === 'prompt') {
             handleClose(inputValue);
         } else {
@@ -65,6 +89,7 @@ const CustomDialog = () => {
     };
 
     const handleCancel = () => {
+        if (!config) return;
         if (config.type === 'prompt') {
             handleClose(null);
         } else {
@@ -77,7 +102,7 @@ const CustomDialog = () => {
         if (e.key === 'Escape') handleCancel();
     };
 
-    if (!isOpen && !config) return null;
+    if (!config) return null;
 
     return (
         <div

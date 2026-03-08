@@ -17,6 +17,8 @@ import {
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 import Sidebar from "./Sidebar";
 import NavBar from "./NavBar";
@@ -25,6 +27,8 @@ import DeletableEdge from "./DeletableEdge";
 import { getUnconnectedInputs, compileGraphToBackendJSON, compileSkeletonToFormulas, validatePayload } from "./GraphCompiler";
 import TemplateRegistry from "./TemplateRegistry";
 import LandingPage from "./LandingPage";
+import AuthScope from "./AuthScope";
+import OnboardingModal from "./OnboardingModal";
 import NodeInspectorPanel from "./NodeInspectorPanel";
 import ResultsDashboard from "./ResultsDashboard";
 import ExecutionTrace from "./ExecutionTrace";
@@ -40,6 +44,8 @@ const nodeTypes = { customNode: CustomNode };
 const edgeTypes = { deletable: DeletableEdge };
 const WORKSPACE_DRAFT_KEY = "faulter_workspace_draft";
 const WORKSPACE_ACTIVE_SESSION_KEY = "faulter_workspace_active_session";
+const AUTH_PROFILE_KEY_PREFIX = "faulter_auth_profile";
+const ONBOARDING_DONE_KEY_PREFIX = "faulter_onboarding_done";
 const WORKSPACE_DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.9 };
 const WORKSPACE_MIN_ZOOM = 0.72;
 const WORKSPACE_MAX_ZOOM = 1.5;
@@ -98,6 +104,9 @@ const getSweepRunCountFromResult = (result) => {
   return 0;
 };
 
+const getAuthProfileStorageKey = (userId) => `${AUTH_PROFILE_KEY_PREFIX}_${userId}`;
+const getOnboardingDoneStorageKey = (userId) => `${ONBOARDING_DONE_KEY_PREFIX}_${userId}`;
+
 function TemplateSummary({ template }) {
   if (!template) return null;
   return (
@@ -122,6 +131,14 @@ function TemplateSummary({ template }) {
 function Flow() {
   const reactFlowWrapper = useRef(null);
   const quickProfileRef = useRef(null);
+  const exportMenuRef = useRef(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authSession, setAuthSession] = useState(null);
+  const [showAuthScope, setShowAuthScope] = useState(false);
+  const [authMode, setAuthMode] = useState("signin");
+  const [pendingLaunchAfterAuth, setPendingLaunchAfterAuth] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [authProfile, setAuthProfile] = useState(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [rfInstance, setRfInstance] = useState(null);
@@ -158,6 +175,8 @@ function Flow() {
   const [selectedTemplateId, setSelectedTemplateId] = useState(sortedTemplates[0]?.id || null);
   const [projectSearch, setProjectSearch] = useState('');
   const [showQuickProfileMenu, setShowQuickProfileMenu] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [executionRecords, setExecutionRecords] = useState([]);
   const [activeCalculationPreview, setActiveCalculationPreview] = useState(null);
   const [selectedCalculationByProject, setSelectedCalculationByProject] = useState({});
@@ -182,11 +201,14 @@ function Flow() {
     return () => window.removeEventListener('openNodeInspector', handleOpenInspector);
   }, []);
 
-  // ── Close quick profile menu on outside click ──
+  // ── Close quick profile/export menus on outside click ──
   useEffect(() => {
     const handleOutside = (e) => {
       if (showQuickProfileMenu && quickProfileRef.current && !quickProfileRef.current.contains(e.target)) {
         setShowQuickProfileMenu(false);
+      }
+      if (showExportMenu && exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
       }
     };
 
@@ -196,7 +218,68 @@ function Flow() {
       document.removeEventListener("mousedown", handleOutside);
       document.removeEventListener("touchstart", handleOutside);
     };
-  }, [showQuickProfileMenu]);
+  }, [showQuickProfileMenu, showExportMenu]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncAuthState = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        const session = data?.session ?? null;
+        setAuthSession(session);
+
+        if (session?.user?.id) {
+          const profileKey = getAuthProfileStorageKey(session.user.id);
+          const onboardingKey = getOnboardingDoneStorageKey(session.user.id);
+          const rawProfile = localStorage.getItem(profileKey);
+          setAuthProfile(rawProfile ? JSON.parse(rawProfile) : null);
+          setShowOnboarding(localStorage.getItem(onboardingKey) !== "1");
+        } else {
+          setAuthProfile(null);
+          setShowOnboarding(false);
+          setIsStarted(false);
+        }
+      } catch {
+        if (isMounted) setAuthSession(null);
+      } finally {
+        if (isMounted) setAuthLoading(false);
+      }
+    };
+
+    syncAuthState();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthSession(session ?? null);
+      if (!session?.user?.id) {
+        setAuthProfile(null);
+        setShowOnboarding(false);
+        setIsStarted(false);
+        try {
+          sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
+        } catch {
+          // Ignore sessionStorage failures.
+        }
+        return;
+      }
+
+      try {
+        const profileKey = getAuthProfileStorageKey(session.user.id);
+        const onboardingKey = getOnboardingDoneStorageKey(session.user.id);
+        const rawProfile = localStorage.getItem(profileKey);
+        setAuthProfile(rawProfile ? JSON.parse(rawProfile) : null);
+        setShowOnboarding(localStorage.getItem(onboardingKey) !== "1");
+      } catch {
+        setShowOnboarding(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
 
   // ── Initialize Pyodide WebWorker ──
   useEffect(() => {
@@ -253,7 +336,7 @@ function Flow() {
     return snap.nodeIds !== curr.nodeIds || snap.edgeKeys !== curr.edgeKeys;
   }, [nodes, edges, makeSnapshotKeys]);
 
-  // Track only workflow structure edits for inactivity-based autosave.
+  // Only track workflow-structure edits for idle autosave scheduling.
   const workflowStructureKey = useMemo(() => {
     const { nodeIds, edgeKeys } = makeSnapshotKeys(nodes, edges);
     return `${nodeIds}||${edgeKeys}`;
@@ -608,7 +691,7 @@ function Flow() {
     if (syncCloud) syncToCloud(project);
   }, [makeSnapshotKeys, syncToCloud]);
 
-  // ── Idle Auto-Save ──
+  // ── Idle Auto-Save (save only after user stops editing for a few seconds) ──
   useEffect(() => {
     if (!currentProjectId || !isStarted || !hasUnsavedChanges()) return;
 
@@ -908,6 +991,1036 @@ function Flow() {
     setConnectionToast({ message, type });
     setTimeout(() => setConnectionToast(null), 3000);
   }, []);
+
+  const getExportFileBaseName = useCallback(() => {
+    const base = (currentProjectName || "tatvalabz_workflow")
+      .toString()
+      .trim()
+      .replace(/[^a-z0-9_-]+/gi, "_")
+      .replace(/^_+|_+$/g, "");
+    return base || "tatvalabz_workflow";
+  }, [currentProjectName]);
+
+  const sanitizeExportName = useCallback((value, fallbackBase) => {
+    const base = (value || fallbackBase || "tatvalabz_export")
+      .toString()
+      .trim()
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[^a-z0-9_-]+/gi, "_")
+      .replace(/^_+|_+$/g, "");
+    return base || fallbackBase || "tatvalabz_export";
+  }, []);
+
+  const downloadTextFile = useCallback((content, fileName, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleExportCsv = useCallback(async () => {
+    const rows = [["section", "key", "value"]];
+    const timestampIso = new Date().toISOString();
+
+    rows.push(["meta", "project_name", currentProjectName || "Untitled workflow"]);
+    rows.push(["meta", "exported_at", timestampIso]);
+    rows.push(["meta", "node_count", String(nodes.length)]);
+    rows.push(["meta", "edge_count", String(edges.length)]);
+    rows.push(["meta", "scenario_count", String(scenarios.length)]);
+    rows.push(["meta", "execution_record_count", String(executionRecords.length)]);
+
+    nodes.forEach((node, index) => {
+      rows.push(["node", `${index + 1}.id`, node.id]);
+      rows.push(["node", `${index + 1}.label`, node?.data?.label || node.id]);
+      rows.push(["node", `${index + 1}.type`, node.type || "customNode"]);
+      rows.push(["node", `${index + 1}.x`, String(node?.position?.x ?? "")]);
+      rows.push(["node", `${index + 1}.y`, String(node?.position?.y ?? "")]);
+    });
+
+    edges.forEach((edge, index) => {
+      rows.push(["edge", `${index + 1}.id`, edge.id]);
+      rows.push(["edge", `${index + 1}.source`, edge.source]);
+      rows.push(["edge", `${index + 1}.target`, edge.target]);
+      rows.push(["edge", `${index + 1}.source_handle`, edge.sourceHandle || ""]);
+      rows.push(["edge", `${index + 1}.target_handle`, edge.targetHandle || ""]);
+    });
+
+    scenarios.forEach((scenario, index) => {
+      rows.push(["scenario", `${index + 1}.id`, scenario.id || `scenario_${index + 1}`]);
+      rows.push(["scenario", `${index + 1}.name`, scenario.name || `Scenario ${index + 1}`]);
+      rows.push(["scenario", `${index + 1}.active`, String(Boolean(scenario.isActive))]);
+      rows.push(["scenario", `${index + 1}.sweeps`, JSON.stringify(scenario.sweeps || {})]);
+    });
+
+    const systemState = backendResult?.system_state || {};
+    Object.entries(systemState).forEach(([key, value]) => {
+      rows.push(["system_state", key, String(value)]);
+    });
+
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const stamp = timestampIso.replace(/[:.]/g, "-");
+    const suggestedName = `${getExportFileBaseName()}_${stamp}.csv`;
+    const requested = await customPrompt("Export CSV", "Enter CSV file name:", suggestedName);
+    if (!requested) {
+      setShowExportMenu(false);
+      return;
+    }
+
+    const fileName = `${sanitizeExportName(requested, getExportFileBaseName())}.csv`;
+    downloadTextFile(csv, fileName, "text/csv;charset=utf-8;");
+    setShowExportMenu(false);
+    showToast(`CSV downloaded: ${fileName}`, "success");
+  }, [currentProjectName, nodes, edges, scenarios, executionRecords.length, backendResult, getExportFileBaseName, sanitizeExportName, downloadTextFile, showToast]);
+
+  const handleExportPdf = useCallback(async () => {
+    if (isPdfExporting) return;
+    const timestampIso = new Date().toISOString();
+    const stamp = timestampIso.replace(/[:.]/g, "-");
+    const suggestedName = `${getExportFileBaseName()}_${stamp}.pdf`;
+    const requested = await customPrompt("Export PDF", "Enter PDF file name:", suggestedName);
+    if (!requested) {
+      setShowExportMenu(false);
+      return;
+    }
+
+    const fileName = `${sanitizeExportName(requested, getExportFileBaseName())}.pdf`;
+    const precisionRaw = await customPrompt(
+      "Display Precision",
+      "Set report-body decimal places (0-10). Layered Value Ledger keeps full precision.",
+      "4"
+    );
+    if (precisionRaw === null) {
+      setShowExportMenu(false);
+      return;
+    }
+    const parsedPrecision = Number.parseInt(String(precisionRaw).trim(), 10);
+    const displayPrecision = Number.isNaN(parsedPrecision) ? 4 : Math.max(0, Math.min(10, parsedPrecision));
+    setIsPdfExporting(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const safeHtml = (value) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    const prettyLabel = (raw) =>
+      String(raw || "")
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (m) => m.toUpperCase());
+
+    const toPrecise = (value) => {
+      if (value === undefined) return "undefined";
+      if (value === null) return "null";
+      if (typeof value === "number") {
+        if (Number.isNaN(value)) return "NaN";
+        if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+        return Number(value).toPrecision(17);
+      }
+      if (typeof value === "string") return value;
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    };
+
+    const toDisplay = (value) => {
+      if (value === undefined) return "undefined";
+      if (value === null) return "null";
+      if (typeof value === "number") {
+        if (Number.isNaN(value)) return "NaN";
+        if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+        return Number(value).toFixed(displayPrecision);
+      }
+      if (typeof value === "string") return value;
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    };
+
+    const formulaReserved = new Set([
+      "Math", "sqrt", "abs", "max", "min", "pow", "sin", "cos", "tan", "log", "exp", "round",
+    ]);
+    const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const extractVariables = (formula) => {
+      const matches = String(formula).match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) || [];
+      return [...new Set(matches.filter((token) => !formulaReserved.has(token)))];
+    };
+    const renderExpression = (expr) => {
+      const tokens = String(expr || "").match(/([A-Za-z_][A-Za-z0-9_]*|-?\d+\.\d+e[+-]?\d+|-?\d+\.\d+|-?\d+|<=|>=|==|!=|\|\||&&|[+\-*/^()=,<>\[\]])/gi) || [];
+      return tokens.map((token) => {
+        const escaped = safeHtml(token);
+        if (/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(token)) return `<span class="tok-num">${escaped}</span>`;
+        if (/^(<=|>=|==|!=|\|\||&&|[+\-*/^()=,<>\[\]])$/.test(token)) return `<span class="tok-op">${escaped}</span>`;
+        if (formulaReserved.has(token)) return `<span class="tok-fn">${escaped}</span>`;
+        return `<span class="tok-var">${escaped}</span>`;
+      }).join(" ");
+    };
+
+    const compiledNodes = Array.isArray(compiledJson?.nodes) ? compiledJson.nodes : [];
+    const nodeById = new Map(compiledNodes.map((node) => [node.id, node]));
+    const uiNodeById = new Map(nodes.map((node) => [node.id, node]));
+    const sortedNodeIds = [...new Set(compiledNodes.map((n) => n.id))].sort((a, b) => b.length - a.length);
+    if (compiledNodes.length === 0) {
+      nodes.forEach((n) => {
+        nodeById.set(n.id, {
+          id: n.id,
+          label: n?.data?.label || n.id,
+          formulas: n?.data?.formulas || {},
+          inputs_mapped: n?.data?.inputs_mapped || {},
+          execution_layer: 0,
+        });
+      });
+    }
+
+    const parseSourceRef = (sourceRef) => {
+      if (!sourceRef) return null;
+      for (const nodeId of sortedNodeIds) {
+        const prefix = `${nodeId}_`;
+        if (sourceRef.startsWith(prefix)) {
+          return { nodeId, outputName: sourceRef.slice(prefix.length) };
+        }
+      }
+      return null;
+    };
+    const getNodeName = (nodeId) => {
+      const compiled = nodeById.get(nodeId);
+      const uiNode = uiNodeById.get(nodeId);
+      const rawLabel =
+        compiled?.label ||
+        compiled?.name ||
+        uiNode?.data?.label ||
+        uiNode?.data?.name ||
+        "Unnamed Component";
+      return prettyLabel(rawLabel);
+    };
+    const getNodeDescription = (nodeId, nodeObj = null) => {
+      const uiNode = uiNodeById.get(nodeId);
+      const candidates = [
+        nodeObj?.description,
+        nodeObj?.desc,
+        uiNode?.data?.description,
+        uiNode?.data?.desc,
+        uiNode?.data?.notes,
+        uiNode?.data?.summary,
+      ];
+      const found = candidates.find((item) => typeof item === "string" && item.trim());
+      return found ? found.trim() : "";
+    };
+    const humanizeSystemField = (key) => {
+      let value = String(key || "");
+      sortedNodeIds.forEach((nodeId) => {
+        const rx = new RegExp(`\\b${escapeRegExp(nodeId)}\\b`, "g");
+        value = value.replace(rx, getNodeName(nodeId));
+      });
+      value = value.replace(/\bnode_\d+\b/gi, "Component");
+      return prettyLabel(value);
+    };
+    const prettySource = (source) => {
+      if (!source) return "Unresolved fallback";
+      if (source.startsWith("mapped:")) {
+        const right = source.replace("mapped:", "");
+        const [node, output] = right.split(".");
+        return `Mapped from ${getNodeName(node)} -> ${prettyLabel(output)}`;
+      }
+      if (source.startsWith("global:")) return `Global constant (${prettyLabel(source.replace("global:", ""))})`;
+      if (source.startsWith("local:")) {
+        const right = source.replace("local:", "");
+        const [nodeId, outputName] = right.split(".");
+        return `Local output (${getNodeName(nodeId)} -> ${prettyLabel(outputName)})`;
+      }
+      if (source.startsWith("scoped:")) {
+        const right = source.replace("scoped:", "");
+        const [nodeId, outputName] = right.includes("__") ? right.split("__") : right.split("_");
+        if (nodeId) return `Scoped value (${getNodeName(nodeId)} -> ${prettyLabel(outputName)})`;
+        return `Scoped system value (${prettyLabel(right)})`;
+      }
+      return prettyLabel(source).replace(/\bNode\s+\d+\b/g, "Component");
+    };
+
+    const layerToNodeIds = new Map();
+    if (Array.isArray(compiledJson?.execution_batches) && compiledJson.execution_batches.length > 0) {
+      compiledJson.execution_batches.forEach((batch) => {
+        const layer = Number(batch.layer ?? 0);
+        const ids = Array.isArray(batch.node_ids) ? batch.node_ids : [];
+        if (!layerToNodeIds.has(layer)) layerToNodeIds.set(layer, []);
+        layerToNodeIds.get(layer).push(...ids);
+      });
+    } else if (compiledNodes.length > 0) {
+      compiledNodes.forEach((node) => {
+        const layer = Number(node.execution_layer ?? 0);
+        if (!layerToNodeIds.has(layer)) layerToNodeIds.set(layer, []);
+        layerToNodeIds.get(layer).push(node.id);
+      });
+    } else if (nodes.length > 0) {
+      layerToNodeIds.set(0, nodes.map((n) => n.id));
+    }
+    const orderedLayers = [...layerToNodeIds.keys()].sort((a, b) => a - b);
+    orderedLayers.forEach((layer) => {
+      const ids = layerToNodeIds.get(layer) || [];
+      layerToNodeIds.set(layer, Array.from(new Set(ids)));
+    });
+    const nodeLayerById = new Map();
+    orderedLayers.forEach((layer) => {
+      (layerToNodeIds.get(layer) || []).forEach((nodeId) => {
+        nodeLayerById.set(nodeId, layer);
+      });
+    });
+    const getSystemFieldLayer = (key) => {
+      const raw = String(key || "");
+      for (const nodeId of sortedNodeIds) {
+        if (raw.includes(`${nodeId}_`) || raw.includes(`${nodeId}__`) || raw === nodeId) {
+          return nodeLayerById.get(nodeId) ?? null;
+        }
+      }
+      return null;
+    };
+
+    const buildVariants = () => {
+      const variants = [];
+      if (backendResult?.node_outputs && backendResult?.system_state) {
+        variants.push({
+          id: "baseline",
+          label: "Baseline Run",
+          sweepSummary: "",
+          nodeOutputs: backendResult.node_outputs,
+          systemState: backendResult.system_state,
+        });
+      }
+      const scenarioResults = Array.isArray(backendResult?.scenario_results) ? backendResult.scenario_results : [];
+      scenarioResults.forEach((scenario) => {
+        const outputsList = Array.isArray(scenario?.data_points) ? scenario.data_points : [];
+        const stateList = Array.isArray(scenario?.system_states) ? scenario.system_states : [];
+        const sweepVars = Array.isArray(scenario?.sweep_variables) ? scenario.sweep_variables : [];
+        const sweepValues = Array.isArray(scenario?.sweep_values) ? scenario.sweep_values : [];
+        outputsList.forEach((nodeOutputs, idx) => {
+          const runVals = sweepValues[idx];
+          const sweepSummary = Array.isArray(runVals)
+            ? sweepVars.map((name, i) => `${prettyLabel(name)}=${toPrecise(runVals[i])}`).join(" | ")
+            : "";
+          variants.push({
+            id: `${scenario?.scenario_id || "scenario"}_${idx + 1}`,
+            label: `${scenario?.scenario_name || "Scenario"} - Iteration ${idx + 1}/${outputsList.length || 1}`,
+            sweepSummary,
+            nodeOutputs: nodeOutputs || {},
+            systemState: stateList[idx] || {},
+          });
+        });
+      });
+
+      if (!scenarioResults.length && Array.isArray(backendResult?.data_points)) {
+        const outputsList = backendResult.data_points;
+        const stateList = Array.isArray(backendResult?.system_states) ? backendResult.system_states : [];
+        outputsList.forEach((nodeOutputs, idx) => {
+          variants.push({
+            id: `sweep_${idx + 1}`,
+            label: `Sweep Iteration ${idx + 1}/${outputsList.length || 1}`,
+            sweepSummary: "",
+            nodeOutputs: nodeOutputs || {},
+            systemState: stateList[idx] || {},
+          });
+        });
+      }
+      return variants;
+    };
+    const variants = buildVariants();
+
+    const buildFormulaAudit = (nodeId, outputName, formula, inputsMapped, variantNodeOutputs, variantSystemState) => {
+      const variableNames = extractVariables(formula);
+      const substitutions = {};
+
+      variableNames.forEach((varName) => {
+        let value;
+        let source = "unresolved(default)";
+        const mappedSourceRef = inputsMapped[varName];
+        if (mappedSourceRef) {
+          const parsed = parseSourceRef(mappedSourceRef);
+          if (parsed) {
+            value = variantNodeOutputs?.[parsed.nodeId]?.[parsed.outputName];
+            if (value === undefined) value = variantSystemState?.[`${parsed.nodeId}_${parsed.outputName}`];
+            source = `mapped:${parsed.nodeId}.${parsed.outputName}`;
+          }
+        }
+        if (value === undefined && variantNodeOutputs?.[nodeId]?.[varName] !== undefined) {
+          value = variantNodeOutputs[nodeId][varName];
+          source = `local:${nodeId}.${varName}`;
+        }
+        if (value === undefined && variantSystemState?.[`${nodeId}__${varName}`] !== undefined) {
+          value = variantSystemState[`${nodeId}__${varName}`];
+          source = `scoped:${nodeId}__${varName}`;
+        }
+        if (value === undefined && variantSystemState?.[`${nodeId}_${varName}`] !== undefined) {
+          value = variantSystemState[`${nodeId}_${varName}`];
+          source = `scoped:${nodeId}_${varName}`;
+        }
+        if (value === undefined && variantSystemState?.[varName] !== undefined) {
+          value = variantSystemState[varName];
+          source = `global:${varName}`;
+        }
+        if (value === undefined) value = 0;
+        substitutions[varName] = { value, source };
+      });
+
+      let expanded = String(formula || "");
+      Object.keys(substitutions).sort((a, b) => b.length - a.length).forEach((varName) => {
+        const displayValue = toDisplay(substitutions[varName].value);
+        const wrapped = displayValue.startsWith("-") ? `(${displayValue})` : displayValue;
+        expanded = expanded.replace(new RegExp(`\\b${escapeRegExp(varName)}\\b`, "g"), wrapped);
+      });
+
+      let outcome = variantNodeOutputs?.[nodeId]?.[outputName];
+      if (outcome === undefined) outcome = variantSystemState?.[`${nodeId}_${outputName}`];
+      if (outcome === undefined) outcome = variantSystemState?.[outputName];
+
+      return { substitutions, expanded, outcome };
+    };
+
+    const variantBlocksHtml = variants.map((variant) => {
+      const variantNodeOutputs = variant.nodeOutputs || {};
+      const variantSystemState = variant.systemState || {};
+
+      const layerBlocks = orderedLayers.map((layer) => {
+        const nodeIds = layerToNodeIds.get(layer) || [];
+        const nodeCards = nodeIds.map((nodeId) => {
+          const node = nodeById.get(nodeId) || {};
+          const nodeLabel = getNodeName(nodeId);
+          const nodeDescription = getNodeDescription(nodeId, node);
+          const formulas = Object.entries(node?.formulas || {});
+          const inputsMapped = node?.inputs_mapped || {};
+
+          const formulaCards = formulas.map(([outputName, formula], formulaIndex) => {
+            const audit = buildFormulaAudit(nodeId, outputName, formula, inputsMapped, variantNodeOutputs, variantSystemState);
+            const sourceRows = Array.from(
+              new Set(Object.values(audit.substitutions).map((data) => prettySource(data.source)))
+            ).map((sourceName) => `
+              <tr>
+                <td>${safeHtml(sourceName)}</td>
+              </tr>
+            `).join("");
+            return `
+              <article class="formula-card">
+                <div class="formula-head">
+                  <span class="formula-index">Formula ${formulaIndex + 1}</span>
+                  <span class="formula-out">${safeHtml(prettyLabel(outputName))}</span>
+                </div>
+                <div class="expr-row">
+                  <span class="lhs mono">${safeHtml(outputName)}</span>
+                  <span class="eq">=</span>
+                  <span class="rhs mono">${renderExpression(formula)}</span>
+                </div>
+                <div class="expr-row soft">
+                  <span class="lhs mono">${safeHtml(outputName)}</span>
+                  <span class="eq">=</span>
+                  <span class="rhs mono">${renderExpression(audit.expanded)}</span>
+                </div>
+                <table class="clean-table dense">
+                  <thead><tr><th>Source Mapping</th></tr></thead>
+                  <tbody>${sourceRows || `<tr><td>No sources resolved</td></tr>`}</tbody>
+                </table>
+                <div class="outcome">
+                  <span>Outcome</span>
+                  <strong class="mono">${safeHtml(toDisplay(audit.outcome))}</strong>
+                </div>
+              </article>
+            `;
+          }).join("");
+
+          return `
+            <section class="node-card">
+              <div class="node-head">
+                <h5>${safeHtml(nodeLabel)}</h5>
+              </div>
+              ${nodeDescription ? `<p class="node-desc">${safeHtml(nodeDescription)}</p>` : ""}
+              ${formulaCards || `<div class="muted-box">No formulas defined for this component.</div>`}
+            </section>
+          `;
+        }).join("");
+
+        return `
+          <section class="layer-block pdf-block must-fit-page">
+            <div class="layer-head">
+              <h4>Layer ${layer}</h4>
+              <div class="layer-chip">${nodeIds.length} component(s)</div>
+            </div>
+            ${nodeCards || `<div class="muted-box">No nodes in this layer.</div>`}
+          </section>
+        `;
+      }).join("");
+
+      return `
+        <section class="variant">
+          <div class="variant-head pdf-block">
+            <h3>${safeHtml(variant.label)}</h3>
+            ${variant.sweepSummary ? `<p>${safeHtml(variant.sweepSummary)}</p>` : ""}
+          </div>
+          ${layerBlocks || `<div class="muted-box pdf-block">No computational trace available.</div>`}
+        </section>
+      `;
+    }).join("");
+
+    const appendixHtml = variants.map((variant) => {
+      const grouped = new Map();
+      Object.entries(variant.systemState || {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([key, value]) => {
+          const layer = getSystemFieldLayer(key);
+          const groupName = layer === null ? "Shared System Values" : `Layer ${layer}`;
+          if (!grouped.has(groupName)) grouped.set(groupName, []);
+          grouped.get(groupName).push({
+            field: humanizeSystemField(key),
+            value: toPrecise(value),
+          });
+        });
+
+      const orderedGroupNames = [
+        ...orderedLayers.map((layer) => `Layer ${layer}`).filter((name) => grouped.has(name)),
+        ...Array.from(grouped.keys()).filter((name) => !name.startsWith("Layer ")),
+      ];
+      const groupsHtml = orderedGroupNames.map((groupName) => {
+        const rows = (grouped.get(groupName) || []).map((row) => `
+          <tr>
+            <td>${safeHtml(row.field)}</td>
+            <td class="mono appendix-value">${safeHtml(row.value)}</td>
+          </tr>
+        `).join("");
+        return `
+          <div class="appendix-group">
+            <div class="appendix-group-title">${safeHtml(groupName)}</div>
+            <table class="clean-table dense appendix-table">
+              <thead><tr><th>Signal</th><th>Computed Value</th></tr></thead>
+              <tbody>${rows || `<tr><td colspan="2">No values</td></tr>`}</tbody>
+            </table>
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <section class="state-block pdf-block">
+          <h4>${safeHtml(variant.label)} Layered Value Ledger</h4>
+          ${groupsHtml || `<div class="muted-box">No values available.</div>`}
+        </section>
+      `;
+    }).join("");
+
+    const summaryCard = (label, value) => `
+      <div class="summary-card">
+        <div class="summary-label">${safeHtml(label)}</div>
+        <div class="summary-value">${safeHtml(value)}</div>
+      </div>
+    `;
+
+    const buildFlowMapSvg = () => {
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        return `<div class="muted-box">Flow map unavailable: no nodes on canvas.</div>`;
+      }
+
+      const svgW = 980;
+      const svgH = 260;
+      const pad = 24;
+      const nodeW = 132;
+      const nodeH = 38;
+      const positioned = nodes.map((n, idx) => ({
+        id: n.id,
+        label: prettyLabel(n?.data?.label || n?.data?.name || "Unnamed Component"),
+        x: Number(n?.position?.x ?? idx * 120),
+        y: Number(n?.position?.y ?? 0),
+      }));
+      const minX = Math.min(...positioned.map((n) => n.x));
+      const maxX = Math.max(...positioned.map((n) => n.x));
+      const minY = Math.min(...positioned.map((n) => n.y));
+      const maxY = Math.max(...positioned.map((n) => n.y));
+      const spanX = Math.max(1, maxX - minX);
+      const spanY = Math.max(1, maxY - minY);
+      const projected = new Map(
+        positioned.map((n) => {
+          const px = pad + ((n.x - minX) / spanX) * (svgW - pad * 2 - nodeW);
+          const py = pad + ((n.y - minY) / spanY) * (svgH - pad * 2 - nodeH);
+          return [n.id, { ...n, px, py }];
+        })
+      );
+
+      const edgeSvg = edges.map((e) => {
+        const s = projected.get(e.source);
+        const t = projected.get(e.target);
+        if (!s || !t) return "";
+        const x1 = s.px + nodeW;
+        const y1 = s.py + nodeH / 2;
+        const x2 = t.px;
+        const y2 = t.py + nodeH / 2;
+        const cx = (x1 + x2) / 2;
+        const linkLabel = `${prettyLabel(e.sourceHandle || "out")} -> ${prettyLabel(e.targetHandle || "in")}`;
+        return `
+          <path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${cx.toFixed(1)} ${y1.toFixed(1)}, ${cx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}"
+            stroke="#ff8a3d" stroke-width="1.6" fill="none" marker-end="url(#flowArrow)" opacity="0.95"/>
+          <text x="${((x1 + x2) / 2).toFixed(1)}" y="${(Math.min(y1, y2) - 4).toFixed(1)}" class="flow-edge-label">${safeHtml(linkLabel)}</text>
+        `;
+      }).join("");
+
+      const nodeSvg = [...projected.values()].map((n) => `
+        <rect x="${n.px.toFixed(1)}" y="${n.py.toFixed(1)}" width="${nodeW}" height="${nodeH}" rx="8" ry="8" fill="#111c2b" stroke="#32b8ff" stroke-width="1.2"/>
+        <rect x="${n.px.toFixed(1)}" y="${n.py.toFixed(1)}" width="${nodeW}" height="11" rx="8" ry="8" fill="#17385e"/>
+        <text x="${(n.px + 7).toFixed(1)}" y="${(n.py + 22).toFixed(1)}" class="flow-node-label">${safeHtml(n.label.slice(0, 24))}</text>
+      `).join("");
+
+      return `
+        <svg class="flow-map-svg" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="flowArrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+              <polygon points="0 0, 9 3.5, 0 7" fill="#ff8a3d"></polygon>
+            </marker>
+          </defs>
+          <rect x="0" y="0" width="${svgW}" height="${svgH}" fill="#0d1521" />
+          ${edgeSvg}
+          ${nodeSvg}
+        </svg>
+      `;
+    };
+
+    const reportHtml = `
+      <div class="report-wrap">
+        <style>
+          .report-wrap {
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            color: #d8e4f5;
+            background: linear-gradient(180deg, #0b1118 0%, #0f1824 100%);
+            padding: 18px 24px 24px;
+          }
+          .hero {
+            border: 1px solid rgba(50, 184, 255, 0.35);
+            border-radius: 12px;
+            background: linear-gradient(135deg, #0e1d2d, #12314f);
+            padding: 16px;
+            margin-bottom: 10px;
+          }
+          .pdf-block {
+            width: 100%;
+            box-sizing: border-box;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .hero h1 { margin: 0; font-size: 18px; color: #f3f9ff; }
+          .hero p { margin: 6px 0 0; font-size: 11px; color: #bfd7f1; }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+          }
+          .summary-card {
+            border: 1px solid rgba(73, 113, 154, 0.5);
+            border-left: 4px solid #32b8ff;
+            border-radius: 8px;
+            background: #101c2a;
+            padding: 8px 10px;
+          }
+          .summary-label { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #88b2df; margin-bottom: 4px; }
+          .summary-value { font-size: 15px; font-weight: 800; color: #f4fbff; }
+          h2 {
+            font-size: 13px;
+            margin: 0;
+            color: #7fc7ff;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+          }
+          .section-title {
+            border: 1px solid rgba(67, 105, 142, 0.45);
+            border-radius: 8px;
+            background: #0f1b2a;
+            padding: 7px 9px;
+            margin: 10px 0 7px;
+          }
+          .section-note {
+            margin-bottom: 8px;
+          }
+          .flow-map {
+            border: 1px solid rgba(68, 108, 146, 0.45);
+            border-radius: 10px;
+            padding: 6px;
+            background: #0d1724;
+            margin-bottom: 8px;
+          }
+          .flow-map-svg {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            display: block;
+          }
+          .flow-edge-label {
+            fill: #f5bd95;
+            font-size: 8px;
+            font-weight: 600;
+            text-anchor: middle;
+            font-family: "JetBrains Mono", "Fira Code", "Consolas", "SFMono-Regular", monospace;
+          }
+          .flow-node-label {
+            fill: #f0f7ff;
+            font-size: 8px;
+            font-weight: 700;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+          }
+          h3 { margin: 0 0 4px 0; font-size: 12px; color: #ecf6ff; }
+          h4 { margin: 0 0 7px 0; font-size: 11px; color: #9cd3ff; }
+          h5 { margin: 0; font-size: 10.5px; color: #e8f2ff; }
+          .variant, .layer-block, .node-card, .formula-card, .state-block {
+            border: 1px solid rgba(66, 104, 141, 0.45);
+            border-radius: 9px;
+            background: #101a27;
+            padding: 10px;
+            margin-bottom: 10px;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .variant-head p { margin: 0 0 3px; font-size: 9px; color: #9dbcdc; }
+          .variant-head {
+            border: 1px solid rgba(72, 112, 149, 0.42);
+            border-radius: 8px;
+            padding: 8px 10px;
+            background: #122132;
+            margin-bottom: 9px;
+          }
+          .layer-head {
+            border: 1px solid rgba(72, 112, 149, 0.36);
+            border-radius: 8px;
+            padding: 8px 10px;
+            background: #122031;
+            margin-bottom: 10px;
+          }
+          .layer-chip {
+            display: inline-block;
+            font-size: 9px;
+            border: 1px solid rgba(50, 184, 255, 0.4);
+            color: #8ed3ff;
+            background: rgba(50, 184, 255, 0.08);
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-bottom: 7px;
+          }
+          .node-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 9px;
+            border-radius: 6px;
+            background: linear-gradient(90deg, rgba(50, 184, 255, 0.2), rgba(255, 138, 61, 0.12));
+            border: 1px solid rgba(100, 140, 178, 0.35);
+            margin-bottom: 8px;
+          }
+          .node-desc {
+            margin: 0 0 8px;
+            font-size: 9px;
+            color: #a8c4df;
+            line-height: 1.4;
+            border-left: 2px solid rgba(50, 184, 255, 0.35);
+            padding-left: 7px;
+          }
+          .formula-card { background: #0f1b29; }
+          .formula-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+          }
+          .formula-index { font-size: 9px; color: #9ec4ea; text-transform: uppercase; letter-spacing: .08em; }
+          .formula-out { font-size: 10px; color: #e2f2ff; font-weight: 700; }
+          .expr-row {
+            display: grid;
+            grid-template-columns: 100px 14px 1fr;
+            gap: 6px;
+            border: 1px solid rgba(73, 116, 162, 0.45);
+            border-radius: 6px;
+            background: #0d1724;
+            padding: 7px;
+            margin-bottom: 6px;
+            font-size: 9.2px;
+            line-height: 1.4;
+          }
+          .expr-row.soft { background: #112033; }
+          .lhs { color: #8fc9ff; text-align: right; font-weight: 700; }
+          .eq { color: #ff8a3d; text-align: center; font-weight: 800; }
+          .rhs { color: #f0f8ff; }
+          .tok-var { color: #32b8ff; font-weight: 700; }
+          .tok-num { color: #ffffff; font-weight: 700; }
+          .tok-op { color: #ff8a3d; font-weight: 700; }
+          .tok-fn { color: #f8d180; font-weight: 700; }
+          .mono { font-family: "JetBrains Mono", "Fira Code", "Consolas", "SFMono-Regular", monospace; }
+          .clean-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+          .clean-table th, .clean-table td {
+            border: 1px solid rgba(78, 112, 148, 0.45);
+            padding: 6px 7px;
+            font-size: 9px;
+            vertical-align: top;
+            color: #dbe8f8;
+          }
+          .clean-table th { background: #172639; color: #95cbff; text-align: left; }
+          .clean-table tr:nth-child(even) td { background: #121f30; }
+          .appendix-group {
+            margin-top: 10px;
+          }
+          .appendix-group-title {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #9cd3ff;
+            margin: 0 0 6px;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+          }
+          .appendix-table th, .appendix-table td {
+            font-size: 10.5px;
+            padding: 8px 9px;
+          }
+          .appendix-value {
+            font-size: 11px;
+            font-weight: 700;
+          }
+          .outcome {
+            margin-top: 6px;
+            border: 1px solid rgba(255, 138, 61, 0.5);
+            border-radius: 6px;
+            background: linear-gradient(90deg, rgba(255, 138, 61, 0.14), rgba(50, 184, 255, 0.08));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 6px;
+          }
+          .outcome span {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #ffd4bb;
+          }
+          .outcome strong {
+            color: #ff8a3d;
+            font-size: 12px;
+            font-weight: 900;
+          }
+          .muted-box {
+            font-size: 9px;
+            color: #9ab7d6;
+            border: 1px dashed rgba(101, 136, 171, 0.55);
+            border-radius: 6px;
+            padding: 8px;
+            background: #0f1a2a;
+          }
+          .section-break {
+            break-before: page;
+            page-break-before: always;
+          }
+          @page { margin: 24px 20px; }
+        </style>
+
+        <div class="hero pdf-block">
+          <h1>TatvaLabz Engineering Computation Report</h1>
+          <p>Project: ${safeHtml(currentProjectName || "Untitled Workflow")} | Exported: ${safeHtml(timestampIso)}</p>
+        </div>
+
+        <div class="summary-grid pdf-block">
+          ${summaryCard("Components", String(compiledNodes.length || nodes.length))}
+          ${summaryCard("Layers", String(orderedLayers.length || 0))}
+          ${summaryCard("Runs", String(variants.length || 0))}
+        </div>
+
+        <div class="section-title pdf-block"><h2>0. Node Flow Map</h2></div>
+        <div class="flow-map pdf-block">${buildFlowMapSvg()}</div>
+
+        <div class="section-title pdf-block"><h2>1. Layered Computational Trace</h2></div>
+        ${variantBlocksHtml || `<div class="muted-box pdf-block">No execution data found. Run Execute first.</div>`}
+
+        <div class="section-title section-break pdf-block"><h2>2. Layered Value Ledger</h2></div>
+        <div class="muted-box section-note pdf-block" style="margin-bottom: 8px;">
+          Values are grouped by execution layer for faster review. Numeric outputs keep full 17-digit precision.
+        </div>
+        ${appendixHtml || `<div class="muted-box pdf-block">No raw system-state data available.</div>`}
+      </div>
+    `;
+
+    let container = null;
+    try {
+      container = document.createElement("div");
+      container.style.position = "absolute";
+      container.style.left = "0";
+      container.style.top = "0";
+      container.style.width = "1100px";
+      container.style.background = "#0b1118";
+      container.style.zIndex = "-2147483647";
+      container.style.pointerEvents = "none";
+      container.innerHTML = reportHtml;
+      document.body.appendChild(container);
+
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      doc.setProperties({
+        title: `TatvaLabz Engineering Export - ${currentProjectName || "Untitled workflow"}`,
+        subject: "Graphic card computational report",
+        author: "TatvaLabz",
+        creator: "TatvaLabz WebApp",
+      });
+
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 20;
+      const marginY = 24;
+      const contentWidth = pageWidth - marginX * 2;
+      const contentHeight = pageHeight - marginY * 2;
+      const drawPageBackground = () => {
+        doc.setFillColor(11, 17, 24);
+        doc.rect(0, 0, pageWidth, pageHeight, "F");
+      };
+      const sliceCanvas = (canvas, fromY, height) => {
+        const piece = document.createElement("canvas");
+        piece.width = canvas.width;
+        piece.height = height;
+        const pctx = piece.getContext("2d");
+        if (!pctx) throw new Error("Unable to create PDF slice context");
+        pctx.drawImage(
+          canvas,
+          0,
+          fromY,
+          canvas.width,
+          height,
+          0,
+          0,
+          canvas.width,
+          height
+        );
+        return piece;
+      };
+
+      const blockSelector = [
+        ".hero.pdf-block",
+        ".summary-grid.pdf-block",
+        ".section-title.pdf-block",
+        ".flow-map.pdf-block",
+        ".section-note.pdf-block",
+        ".variant-head.pdf-block",
+        ".layer-block.pdf-block",
+        ".state-block.pdf-block",
+        ".muted-box.pdf-block",
+      ].join(", ");
+      const exportBlocks = Array.from(container.querySelectorAll(blockSelector));
+      if (exportBlocks.length === 0) {
+        throw new Error("No export blocks found for pagination");
+      }
+
+      let yCursor = marginY;
+      drawPageBackground();
+      const blockGap = 6;
+
+      for (const block of exportBlocks) {
+        if (block.classList.contains("section-break") && yCursor !== marginY) {
+          doc.addPage();
+          drawPageBackground();
+          yCursor = marginY;
+        }
+
+        const blockCanvas = await html2canvas(block, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#0b1118",
+          logging: false,
+          windowWidth: Math.max(container.scrollWidth, 1100),
+        });
+        if (!blockCanvas.width || !blockCanvas.height) continue;
+
+        const fullBlockHeightPt = (blockCanvas.height * contentWidth) / blockCanvas.width;
+        const mustFitPage = block.classList.contains("must-fit-page");
+        if (mustFitPage) {
+          if (yCursor !== marginY && fullBlockHeightPt > (pageHeight - marginY - yCursor)) {
+            doc.addPage();
+            drawPageBackground();
+            yCursor = marginY;
+          }
+
+          let renderWidthPt = contentWidth;
+          let renderHeightPt = fullBlockHeightPt;
+          let renderXPt = marginX;
+          if (fullBlockHeightPt > contentHeight) {
+            const fitScale = contentHeight / fullBlockHeightPt;
+            renderHeightPt = contentHeight;
+            renderWidthPt = contentWidth * fitScale;
+            renderXPt = marginX + ((contentWidth - renderWidthPt) / 2);
+          }
+
+          const blockImage = blockCanvas.toDataURL("image/png", 1.0);
+          doc.addImage(blockImage, "PNG", renderXPt, yCursor, renderWidthPt, renderHeightPt, undefined, "FAST");
+          yCursor += renderHeightPt + blockGap;
+          if (yCursor > pageHeight - marginY - 8) {
+            doc.addPage();
+            drawPageBackground();
+            yCursor = marginY;
+          }
+          continue;
+        }
+
+        if (fullBlockHeightPt <= (pageHeight - marginY - yCursor)) {
+          const blockImage = blockCanvas.toDataURL("image/png", 1.0);
+          doc.addImage(blockImage, "PNG", marginX, yCursor, contentWidth, fullBlockHeightPt, undefined, "FAST");
+          yCursor += fullBlockHeightPt + blockGap;
+          continue;
+        }
+
+        if (fullBlockHeightPt <= contentHeight) {
+          doc.addPage();
+          drawPageBackground();
+          yCursor = marginY;
+          const blockImage = blockCanvas.toDataURL("image/png", 1.0);
+          doc.addImage(blockImage, "PNG", marginX, yCursor, contentWidth, fullBlockHeightPt, undefined, "FAST");
+          yCursor += fullBlockHeightPt + blockGap;
+          continue;
+        }
+
+        let consumedPx = 0;
+        while (consumedPx < blockCanvas.height) {
+          const spaceLeftPt = pageHeight - marginY - yCursor;
+          if (spaceLeftPt < 24) {
+            doc.addPage();
+            drawPageBackground();
+            yCursor = marginY;
+          }
+          const usablePt = pageHeight - marginY - yCursor;
+          const sliceHeightPx = Math.max(1, Math.floor((usablePt * blockCanvas.width) / contentWidth));
+          const remainPx = blockCanvas.height - consumedPx;
+          const takePx = Math.min(sliceHeightPx, remainPx);
+          const piece = sliceCanvas(blockCanvas, consumedPx, takePx);
+          const renderedHeightPt = (takePx * contentWidth) / blockCanvas.width;
+          const pieceImage = piece.toDataURL("image/png", 1.0);
+          doc.addImage(pieceImage, "PNG", marginX, yCursor, contentWidth, renderedHeightPt, undefined, "FAST");
+          consumedPx += takePx;
+          yCursor += renderedHeightPt + blockGap;
+          if (consumedPx < blockCanvas.height) {
+            doc.addPage();
+            drawPageBackground();
+            yCursor = marginY;
+          }
+        }
+      }
+
+      doc.save(fileName);
+      showToast(`PDF downloaded: ${fileName}`, "success");
+    } catch (err) {
+      showToast(`PDF export failed: ${err?.message || err}`, "error");
+    } finally {
+      if (container?.parentNode) container.parentNode.removeChild(container);
+      setShowExportMenu(false);
+      setIsPdfExporting(false);
+    }
+  }, [currentProjectName, nodes, edges, backendResult, compiledJson, getExportFileBaseName, sanitizeExportName, showToast, isPdfExporting]);
 
   const wouldCreateCycle = useCallback((sourceId, targetId, currentEdges) => {
     const adjacency = {};
@@ -1245,7 +2358,49 @@ function Flow() {
     showToast("Calculation record deleted", "success");
   };
 
+  const activeUser = authSession?.user || null;
+
+  const handleCompleteOnboarding = useCallback(async (profile) => {
+    if (!activeUser?.id) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    try {
+      const profileKey = getAuthProfileStorageKey(activeUser.id);
+      const onboardingKey = getOnboardingDoneStorageKey(activeUser.id);
+      localStorage.setItem(profileKey, JSON.stringify(profile));
+      localStorage.setItem(onboardingKey, "1");
+      setAuthProfile(profile);
+      setShowOnboarding(false);
+
+      // Optional cloud profile write (safe no-op if table doesn't exist yet).
+      await supabase.from("profiles").upsert({
+        id: activeUser.id,
+        email: activeUser.email,
+        full_name: profile.fullName || null,
+        organization: profile.organization || null,
+        role: profile.role || null,
+        use_case: profile.useCase || null,
+        storage_plan: profile.storagePlan || "local-first",
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn("Onboarding profile saved locally only:", err?.message || err);
+    }
+  }, [activeUser]);
+
   // ── View Switching Logic ──
+  const openAuthFlow = useCallback((mode = "signin", launchAfterAuth = false) => {
+    setAuthMode(mode === "signup" ? "signup" : "signin");
+    setPendingLaunchAfterAuth(Boolean(launchAfterAuth));
+    setShowAuthScope(true);
+  }, []);
+
+  const handleAuthSuccess = useCallback(() => {
+    setShowAuthScope(false);
+  }, []);
+
   const handleLaunchWorkspace = () => {
     setActiveSection("workspace");
     setIsStarted(true);
@@ -1274,8 +2429,25 @@ function Flow() {
     }
   };
 
+  useEffect(() => {
+    if (!authSession || !pendingLaunchAfterAuth) return;
+    setPendingLaunchAfterAuth(false);
+    setShowAuthScope(false);
+    setActiveSection("workspace");
+    setIsStarted(true);
+    try {
+      sessionStorage.setItem(WORKSPACE_ACTIVE_SESSION_KEY, "1");
+    } catch {
+      // Ignore sessionStorage write failures and keep in-memory state.
+    }
+  }, [authSession, pendingLaunchAfterAuth]);
+
   if (!isStarted) {
-    return <LandingPage onStart={handleLaunchWorkspace} />;
+    return (
+      <>
+        <LandingPage onStart={handleLaunchWorkspace} />
+      </>
+    );
   }
 
   return (
@@ -1519,6 +2691,87 @@ function Flow() {
                   }
                 }}
               >{loading ? 'BUSY' : 'EXECUTE'}</button>
+
+              {/* Export Menu */}
+              <div ref={exportMenuRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  disabled={isPdfExporting}
+                  title="Export"
+                  className="action-icon-btn"
+                  style={{
+                    height: '24px', borderRadius: '4px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: showExportMenu ? 'rgba(14, 165, 233, 0.18)' : 'rgba(100, 160, 220, 0.08)',
+                    border: `1px solid ${showExportMenu ? 'rgba(14, 165, 233, 0.55)' : 'rgba(14, 165, 233, 0.35)'}`,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                    cursor: isPdfExporting ? 'wait' : 'pointer', transition: 'all 0.1s ease',
+                    fontSize: '9px',
+                    fontWeight: 900,
+                    padding: '0 10px',
+                    color: isPdfExporting ? '#7aa8c5' : '#38bdf8',
+                    letterSpacing: '0.08em'
+                  }}
+                >
+                  {isPdfExporting ? 'PROCESSING…' : 'EXPORT'}
+                </button>
+                {showExportMenu && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '30px',
+                      right: 0,
+                      minWidth: '132px',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-technical)',
+                      borderRadius: '4px',
+                      boxShadow: 'var(--shadow-node)',
+                      overflow: 'hidden',
+                      zIndex: 80,
+                    }}
+                  >
+                    <button
+                      onClick={handleExportCsv}
+                      disabled={isPdfExporting}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#c5d5e8',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '8px 10px',
+                        cursor: isPdfExporting ? 'not-allowed' : 'pointer',
+                        opacity: isPdfExporting ? 0.5 : 1,
+                        letterSpacing: '0.03em',
+                      }}
+                    >
+                      EXPORT CSV
+                    </button>
+                    <button
+                      onClick={handleExportPdf}
+                      disabled={isPdfExporting}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        background: 'rgba(56, 189, 248, 0.08)',
+                        border: 'none',
+                        borderTop: '1px solid rgba(56, 189, 248, 0.18)',
+                        color: '#93c5fd',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '8px 10px',
+                        cursor: isPdfExporting ? 'not-allowed' : 'pointer',
+                        opacity: isPdfExporting ? 0.5 : 1,
+                        letterSpacing: '0.03em',
+                      }}
+                    >
+                      EXPORT PDF
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Quick Profile Menu */}
               <div ref={quickProfileRef} style={{ position: 'relative' }}>
@@ -2572,16 +3825,25 @@ function Flow() {
 
             {activeSection === "profile" && (
               <div className="max-w-xl mx-auto p-8">
+                {(() => {
+                  const profileName =
+                    authProfile?.fullName ||
+                    activeUser?.user_metadata?.full_name ||
+                    (activeUser?.email ? activeUser.email.split("@")[0] : "User");
+                  const profileEmail = activeUser?.email || "user@example.com";
+                  const profileOrganization = authProfile?.organization || "Not set";
+                  return (
+                    <>
                 <div className="flex items-center gap-5 mb-8">
                   <div className="w-16 h-16 rounded-sm flex items-center justify-center text-2xl font-bold"
                     style={{
                       background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(167, 139, 250, 0.2))',
                       border: '1px solid rgba(34, 211, 238, 0.2)',
                       color: '#e2e8f0',
-                    }}>U</div>
+                    }}>{profileName?.[0]?.toUpperCase() || "U"}</div>
                   <div>
-                    <h2 className="text-xl font-bold" style={{ color: '#e2e8f0' }}>User</h2>
-                    <p className="text-sm" style={{ color: '#4a5568' }}>user@example.com</p>
+                    <h2 className="text-xl font-bold" style={{ color: '#e2e8f0' }}>{profileName}</h2>
+                    <p className="text-sm" style={{ color: '#4a5568' }}>{profileEmail}</p>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -2590,7 +3852,7 @@ function Flow() {
                       <label className="text-xs mb-1 block" style={{ color: '#6b7fa0' }}>{field}</label>
                       <input
                         type="text"
-                        defaultValue={["User", "user@example.com", "Faulter Labs"][i]}
+                        defaultValue={[profileName, profileEmail, profileOrganization][i]}
                         style={{
                           width: '100%',
                           background: 'var(--bg-surface)',
@@ -2609,6 +3871,9 @@ function Flow() {
                     </div>
                   ))}
                 </div>
+                    </>
+                  );
+                })()}
                 <button
                   onClick={handleCloseWorkspace}
                   className="mt-8 w-full active:scale-95 transition-transform"
@@ -2668,6 +3933,41 @@ function Flow() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {isPdfExporting && (
+        <div
+          className="fixed inset-0 z-[9997] flex items-center justify-center"
+          style={{ background: "rgba(4, 10, 18, 0.78)", backdropFilter: "blur(2px)" }}
+        >
+          <div
+            className="w-[min(420px,92vw)] p-5"
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid rgba(56, 189, 248, 0.35)",
+              borderRadius: "4px",
+              boxShadow: "var(--shadow-node)",
+            }}
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div
+                className="animate-spin"
+                style={{
+                  width: "16px",
+                  height: "16px",
+                  borderRadius: "999px",
+                  border: "2px solid rgba(56, 189, 248, 0.25)",
+                  borderTopColor: "#38bdf8",
+                }}
+              />
+              <h3 className="text-sm font-bold uppercase tracking-tight" style={{ color: "#dbeafe" }}>
+                Processing PDF Export
+              </h3>
+            </div>
+            <p className="text-xs" style={{ color: "#8fb4de", lineHeight: 1.45 }}>
+              Building and paginating report containers in the background. Download will start automatically once ready.
+            </p>
           </div>
         </div>
       )}
