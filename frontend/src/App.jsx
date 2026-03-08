@@ -40,6 +40,9 @@ const nodeTypes = { customNode: CustomNode };
 const edgeTypes = { deletable: DeletableEdge };
 const WORKSPACE_SESSION_KEY = "faulter_workspace_session";
 const WORKSPACE_DRAFT_KEY = "faulter_workspace_draft";
+const WORKSPACE_DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.9 };
+const WORKSPACE_MIN_ZOOM = 0.72;
+const WORKSPACE_MAX_ZOOM = 1.5;
 
 // Global IDs are calculated dynamically inside onDrop
 
@@ -1604,6 +1607,10 @@ function Flow() {
                 nodeTypes={nodeTypes} edgeTypes={edgeTypes}
                 defaultEdgeOptions={{ type: "deletable" }}
                 isValidConnection={isValidConnection}
+                defaultViewport={WORKSPACE_DEFAULT_VIEWPORT}
+                minZoom={WORKSPACE_MIN_ZOOM}
+                maxZoom={WORKSPACE_MAX_ZOOM}
+                fitViewOptions={{ minZoom: 0.82, maxZoom: 1.08, padding: 0.14 }}
                 fitView deleteKeyCode="Delete"
                 className="bg-transparent"
                 onNodeDoubleClick={(e, node) => setInspectedNodeId(node.id)}
@@ -1662,7 +1669,7 @@ function Flow() {
 
             {/* ── Node Library Panel ── */}
             {showLibrary && (
-              <div className="w-[280px] flex flex-col shrink-0 overflow-hidden min-h-0"
+              <div className="w-[clamp(220px,20vw,280px)] flex flex-col shrink-0 overflow-hidden min-h-0"
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid rgba(100, 160, 220, 0.08)',
@@ -1689,7 +1696,7 @@ function Flow() {
 
             {/* ── Output Panel ── */}
             {showPanel && (compiledJson || backendResult) && (
-              <div className="w-[460px] flex flex-col shrink-0 overflow-hidden min-h-0"
+              <div className="w-[clamp(300px,30vw,420px)] flex flex-col shrink-0 overflow-hidden min-h-0"
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid rgba(100, 160, 220, 0.08)',

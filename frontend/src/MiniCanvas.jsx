@@ -179,6 +179,9 @@ function MiniCanvasInner({ parentNodeId, parentNodeData }) {
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                minZoom={0.72}
+                maxZoom={1.5}
+                fitViewOptions={{ minZoom: 0.82, maxZoom: 1.08, padding: 0.12 }}
                 fitView
                 className="mini-canvas-theme"
                 nodesDraggable={false}

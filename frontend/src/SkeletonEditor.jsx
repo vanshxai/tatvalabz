@@ -868,6 +868,9 @@ function SkeletonEditorInner({ targetNode, onBack, onSave }) {
                         onDrop={onDrop}
                         onDragOver={onDragOver}
                         nodeTypes={nodeTypes}
+                        minZoom={0.72}
+                        maxZoom={1.5}
+                        fitViewOptions={{ minZoom: 0.82, maxZoom: 1.08, padding: 0.14 }}
                         fitView
                         className="skeleton-editor-theme"
                     >
