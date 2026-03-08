@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { customConfirm } from './CustomDialog';
 import ComponentRegistry from "./ComponentRegistry";
@@ -27,6 +27,8 @@ const extractFormulaVariables = (formulas = {}) => {
     });
     return Array.from(vars);
 };
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, setScenarios, scenarios }) {
     const { getNode, updateNodeData, setNodes, setEdges } = useReactFlow();
@@ -193,16 +195,126 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
         label: displayName,
     });
 
+    const [panelSize, setPanelSize] = useState(() => {
+        const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1400;
+        const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
+        const width = clamp(Math.round(viewportWidth * 0.78), 760, 1400);
+        const height = clamp(Math.round(viewportHeight * 0.62), 420, 860);
+        return { width, height };
+    });
+    const [panelPos, setPanelPos] = useState(() => {
+        const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1400;
+        const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
+        const width = clamp(Math.round(viewportWidth * 0.78), 760, 1400);
+        const height = clamp(Math.round(viewportHeight * 0.62), 420, 860);
+        return {
+            left: Math.max(8, Math.round((viewportWidth - width) / 2)),
+            top: Math.max(8, Math.round((viewportHeight - height) / 2)),
+        };
+    });
+
+    const dragStateRef = useRef(null);
+    const resizeStateRef = useRef(null);
+
+    const handleDragStart = useCallback((event) => {
+        event.preventDefault();
+        dragStateRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            initialLeft: panelPos.left,
+            initialTop: panelPos.top,
+        };
+    }, [panelPos.left, panelPos.top]);
+
+    const handleResizeStart = useCallback((event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        resizeStateRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            initialWidth: panelSize.width,
+            initialHeight: panelSize.height,
+            initialLeft: panelPos.left,
+            initialTop: panelPos.top,
+        };
+    }, [panelPos.left, panelPos.top, panelSize.height, panelSize.width]);
+
+    useEffect(() => {
+        const handlePointerMove = (event) => {
+            if (dragStateRef.current) {
+                const drag = dragStateRef.current;
+                const nextLeft = drag.initialLeft + (event.clientX - drag.startX);
+                const nextTop = drag.initialTop + (event.clientY - drag.startY);
+                const maxLeft = window.innerWidth - panelSize.width - 8;
+                const maxTop = window.innerHeight - panelSize.height - 8;
+                setPanelPos({
+                    left: clamp(nextLeft, 8, Math.max(8, maxLeft)),
+                    top: clamp(nextTop, 8, Math.max(8, maxTop)),
+                });
+                return;
+            }
+
+            if (resizeStateRef.current) {
+                const resize = resizeStateRef.current;
+                const rawWidth = resize.initialWidth + (event.clientX - resize.startX);
+                const rawHeight = resize.initialHeight + (event.clientY - resize.startY);
+                const maxWidth = window.innerWidth - resize.initialLeft - 8;
+                const maxHeight = window.innerHeight - resize.initialTop - 8;
+                setPanelSize({
+                    width: clamp(rawWidth, 640, Math.max(640, maxWidth)),
+                    height: clamp(rawHeight, 360, Math.max(360, maxHeight)),
+                });
+            }
+        };
+
+        const handlePointerUp = () => {
+            dragStateRef.current = null;
+            resizeStateRef.current = null;
+        };
+
+        window.addEventListener("mousemove", handlePointerMove);
+        window.addEventListener("mouseup", handlePointerUp);
+        return () => {
+            window.removeEventListener("mousemove", handlePointerMove);
+            window.removeEventListener("mouseup", handlePointerUp);
+        };
+    }, [panelSize.width, panelSize.height]);
+
+    useEffect(() => {
+        const handleWindowResize = () => {
+            setPanelSize((prev) => {
+                const maxWidth = Math.max(640, window.innerWidth - panelPos.left - 8);
+                const maxHeight = Math.max(360, window.innerHeight - panelPos.top - 8);
+                return {
+                    width: clamp(prev.width, 640, maxWidth),
+                    height: clamp(prev.height, 360, maxHeight),
+                };
+            });
+            setPanelPos((prev) => {
+                const maxLeft = window.innerWidth - panelSize.width - 8;
+                const maxTop = window.innerHeight - panelSize.height - 8;
+                return {
+                    left: clamp(prev.left, 8, Math.max(8, maxLeft)),
+                    top: clamp(prev.top, 8, Math.max(8, maxTop)),
+                };
+            });
+        };
+
+        window.addEventListener("resize", handleWindowResize);
+        return () => window.removeEventListener("resize", handleWindowResize);
+    }, [panelPos.left, panelPos.top, panelSize.width, panelSize.height]);
+
     return (
         <div
-            className="absolute bottom-0 left-0 right-0 z-50 flex flex-col pointer-events-auto"
+            className="fixed z-50 flex flex-col pointer-events-auto rounded-sm overflow-hidden"
             style={{
-                width: "100%",
-                height: "60vh",
+                left: `${panelPos.left}px`,
+                top: `${panelPos.top}px`,
+                width: `${panelSize.width}px`,
+                height: `${panelSize.height}px`,
                 background: "var(--bg-base)",
-                borderTop: "1px solid var(--border-technical)",
+                border: "1px solid var(--border-technical)",
                 boxShadow: "var(--shadow-node)",
-                animation: "slideUpPanel 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
             }}
             onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
         >
@@ -212,7 +324,10 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                 style={{
                     background: theme.headerBg,
                     borderBottom: "1px solid var(--border-technical)",
+                    cursor: "move",
+                    userSelect: "none",
                 }}
+                onMouseDown={handleDragStart}
             >
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-black/40 border border-white/10" style={{ color: theme.headerColor }}>
@@ -525,6 +640,23 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                     <MiniCanvas parentNodeId={nodeId} parentNodeData={data} />
                 </div>
             </div>
+
+            <div
+                onMouseDown={handleResizeStart}
+                style={{
+                    position: "absolute",
+                    width: "16px",
+                    height: "16px",
+                    right: "2px",
+                    bottom: "2px",
+                    cursor: "nwse-resize",
+                    borderRight: "2px solid rgba(103, 232, 249, 0.5)",
+                    borderBottom: "2px solid rgba(103, 232, 249, 0.5)",
+                    opacity: 0.9,
+                }}
+                aria-label="Resize inspector panel"
+                title="Resize"
+            />
         </div>
     );
 }
