@@ -38,8 +38,8 @@ import { resolveNodeIcon } from "./IconCatalog";
 
 const nodeTypes = { customNode: CustomNode };
 const edgeTypes = { deletable: DeletableEdge };
-const WORKSPACE_SESSION_KEY = "faulter_workspace_session";
 const WORKSPACE_DRAFT_KEY = "faulter_workspace_draft";
+const WORKSPACE_ACTIVE_SESSION_KEY = "faulter_workspace_active_session";
 const WORKSPACE_DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.9 };
 const WORKSPACE_MIN_ZOOM = 0.72;
 const WORKSPACE_MAX_ZOOM = 1.5;
@@ -144,7 +144,7 @@ function Flow() {
   const [activeSkeletonNodeId, setActiveSkeletonNodeId] = useState(null);
   const [isStarted, setIsStarted] = useState(() => {
     try {
-      return localStorage.getItem(WORKSPACE_SESSION_KEY) === "1";
+      return sessionStorage.getItem(WORKSPACE_ACTIVE_SESSION_KEY) === "1";
     } catch {
       return false;
     }
@@ -312,7 +312,6 @@ function Flow() {
       if (typeof draft.activeSection === "string") setActiveSection(draft.activeSection);
       if (typeof draft.activeTab === "string") setActiveTab(draft.activeTab);
       if (typeof draft.showPanel === "boolean") setShowPanel(draft.showPanel);
-      if (draft.isStarted) setIsStarted(true);
 
       const restoredUnconnected = getUnconnectedInputs(draftNodes, draftEdges);
       setLeafInputs(restoredUnconnected);
@@ -349,7 +348,6 @@ function Flow() {
         selectedTemplateId,
         activeTab,
         showPanel,
-        isStarted,
         updatedAt: new Date().toISOString(),
       };
       localStorage.setItem(WORKSPACE_DRAFT_KEY, JSON.stringify(draft));
@@ -371,7 +369,6 @@ function Flow() {
     selectedTemplateId,
     activeTab,
     showPanel,
-    isStarted,
   ]);
 
   // ── Warn user before browser refresh/close if unsaved graph changes exist ──
@@ -1240,9 +1237,9 @@ function Flow() {
     setActiveSection("workspace");
     setIsStarted(true);
     try {
-      localStorage.setItem(WORKSPACE_SESSION_KEY, "1");
+      sessionStorage.setItem(WORKSPACE_ACTIVE_SESSION_KEY, "1");
     } catch {
-      // Ignore localStorage write failures and keep in-memory state.
+      // Ignore sessionStorage write failures and keep in-memory state.
     }
   };
   const handleCloseWorkspace = async () => {
@@ -1258,9 +1255,9 @@ function Flow() {
     setActiveSection("workspace");
     setIsStarted(false);
     try {
-      localStorage.removeItem(WORKSPACE_SESSION_KEY);
+      sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
     } catch {
-      // Ignore localStorage write failures and keep in-memory state.
+      // Ignore sessionStorage write failures and keep in-memory state.
     }
   };
 
