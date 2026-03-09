@@ -150,6 +150,10 @@ function Flow() {
   const reactFlowWrapper = useRef(null);
   const quickProfileRef = useRef(null);
   const exportMenuRef = useRef(null);
+  const simulateButtonRef = useRef(null);
+  const libraryButtonRef = useRef(null);
+  const simulatePanelRef = useRef(null);
+  const libraryPanelRef = useRef(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authSession, setAuthSession] = useState(null);
   const [showAuthScope, setShowAuthScope] = useState(false);
@@ -194,7 +198,6 @@ function Flow() {
   const [projectSearch, setProjectSearch] = useState('');
   const [showQuickProfileMenu, setShowQuickProfileMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [hoverOpenedPanel, setHoverOpenedPanel] = useState(null);
   const [isCsvExporting, setIsCsvExporting] = useState(false);
   const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [executionRecords, setExecutionRecords] = useState([]);
@@ -207,9 +210,6 @@ function Flow() {
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pyodideStatus, setPyodideStatus] = useState('Initializing...');
   const solveResolverRef = useRef(null);
-  const hoverPanelCloseTimeoutRef = useRef(null);
-  const exportMenuCloseTimeoutRef = useRef(null);
-  const quickProfileMenuCloseTimeoutRef = useRef(null);
 
   // Persistent Sequence Counter for dropping nodes
   const nodeSequenceCount = useRef(0);
@@ -224,7 +224,7 @@ function Flow() {
     return () => window.removeEventListener('openNodeInspector', handleOpenInspector);
   }, []);
 
-  // ── Close quick profile/export menus on outside click ──
+  // ── Close popup panels/menus on outside click ──
   useEffect(() => {
     const handleOutside = (e) => {
       if (showQuickProfileMenu && quickProfileRef.current && !quickProfileRef.current.contains(e.target)) {
@@ -232,6 +232,24 @@ function Flow() {
       }
       if (showExportMenu && exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
         setShowExportMenu(false);
+      }
+      if (
+        showPanel &&
+        simulatePanelRef.current &&
+        !simulatePanelRef.current.contains(e.target) &&
+        simulateButtonRef.current &&
+        !simulateButtonRef.current.contains(e.target)
+      ) {
+        setShowPanel(false);
+      }
+      if (
+        showLibraryPanel &&
+        libraryPanelRef.current &&
+        !libraryPanelRef.current.contains(e.target) &&
+        libraryButtonRef.current &&
+        !libraryButtonRef.current.contains(e.target)
+      ) {
+        setShowLibraryPanel(false);
       }
     };
 
@@ -241,71 +259,7 @@ function Flow() {
       document.removeEventListener("mousedown", handleOutside);
       document.removeEventListener("touchstart", handleOutside);
     };
-  }, [showQuickProfileMenu, showExportMenu]);
-
-  useEffect(() => {
-    return () => {
-      if (hoverPanelCloseTimeoutRef.current) {
-        clearTimeout(hoverPanelCloseTimeoutRef.current);
-        hoverPanelCloseTimeoutRef.current = null;
-      }
-      if (exportMenuCloseTimeoutRef.current) {
-        clearTimeout(exportMenuCloseTimeoutRef.current);
-        exportMenuCloseTimeoutRef.current = null;
-      }
-      if (quickProfileMenuCloseTimeoutRef.current) {
-        clearTimeout(quickProfileMenuCloseTimeoutRef.current);
-        quickProfileMenuCloseTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  const cancelExportMenuClose = useCallback(() => {
-    if (exportMenuCloseTimeoutRef.current) {
-      clearTimeout(exportMenuCloseTimeoutRef.current);
-      exportMenuCloseTimeoutRef.current = null;
-    }
-  }, []);
-
-  const scheduleExportMenuClose = useCallback(() => {
-    cancelExportMenuClose();
-    exportMenuCloseTimeoutRef.current = setTimeout(() => {
-      setShowExportMenu(false);
-      exportMenuCloseTimeoutRef.current = null;
-    }, 220);
-  }, [cancelExportMenuClose]);
-
-  const cancelQuickProfileMenuClose = useCallback(() => {
-    if (quickProfileMenuCloseTimeoutRef.current) {
-      clearTimeout(quickProfileMenuCloseTimeoutRef.current);
-      quickProfileMenuCloseTimeoutRef.current = null;
-    }
-  }, []);
-
-  const scheduleQuickProfileMenuClose = useCallback(() => {
-    cancelQuickProfileMenuClose();
-    quickProfileMenuCloseTimeoutRef.current = setTimeout(() => {
-      setShowQuickProfileMenu(false);
-      quickProfileMenuCloseTimeoutRef.current = null;
-    }, 220);
-  }, [cancelQuickProfileMenuClose]);
-
-  const scheduleHoverPanelClose = useCallback(() => {
-    if (hoverPanelCloseTimeoutRef.current) clearTimeout(hoverPanelCloseTimeoutRef.current);
-    hoverPanelCloseTimeoutRef.current = setTimeout(() => {
-      if (hoverOpenedPanel === "simulation") setShowPanel(false);
-      if (hoverOpenedPanel === "library") setShowLibraryPanel(false);
-      setHoverOpenedPanel(null);
-      hoverPanelCloseTimeoutRef.current = null;
-    }, 120);
-  }, [hoverOpenedPanel]);
-
-  const cancelHoverPanelClose = useCallback(() => {
-    if (hoverPanelCloseTimeoutRef.current) {
-      clearTimeout(hoverPanelCloseTimeoutRef.current);
-      hoverPanelCloseTimeoutRef.current = null;
-    }
-  }, []);
+  }, [showQuickProfileMenu, showExportMenu, showPanel, showLibraryPanel]);
 
   useEffect(() => {
     let isMounted = true;
@@ -2667,9 +2621,8 @@ function Flow() {
 
               {/* Simulate */}
               <button
+                ref={simulateButtonRef}
                 onClick={() => {
-                  setHoverOpenedPanel(null);
-                  cancelHoverPanelClose();
                   setShowPanel((v) => {
                     const next = !v;
                     if (next) setActiveTab("simulation");
@@ -2678,8 +2631,6 @@ function Flow() {
                   setShowLibraryPanel(false);
                 }}
                 onMouseEnter={(e) => {
-                  cancelHoverPanelClose();
-                  setHoverOpenedPanel("simulation");
                   setShowPanel(true);
                   setActiveTab("simulation");
                   setShowLibraryPanel(false);
@@ -2696,11 +2647,6 @@ function Flow() {
                   border: `1px solid ${showPanel ? 'var(--primary)' : 'var(--primary-glow)'}`,
                   color: 'var(--primary-strong)',
                 }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = showPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)';
-                  e.currentTarget.style.borderColor = showPanel ? 'var(--primary)' : 'var(--primary-glow)';
-                  scheduleHoverPanelClose();
-                }}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l10 6-10 6V6z" /></svg>
                 SIMULATE
@@ -2708,15 +2654,12 @@ function Flow() {
 
               {/* Node Library — icon only */}
               <button
+                ref={libraryButtonRef}
                 onClick={() => {
-                  setHoverOpenedPanel(null);
-                  cancelHoverPanelClose();
                   setShowLibraryPanel((v) => !v);
                   setShowPanel(false);
                 }}
                 onMouseEnter={(e) => {
-                  cancelHoverPanelClose();
-                  setHoverOpenedPanel("library");
                   setShowLibraryPanel(true);
                   setShowPanel(false);
                   setShowExportMenu(false);
@@ -2732,11 +2675,6 @@ function Flow() {
                   border: `1px solid ${showLibraryPanel ? 'var(--primary)' : 'var(--primary-glow)'}`,
                   color: 'var(--primary-strong)',
                 }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = showLibraryPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)';
-                  e.currentTarget.style.borderColor = showLibraryPanel ? 'var(--primary)' : 'var(--primary-glow)';
-                  scheduleHoverPanelClose();
-                }}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v16H4zM13 4h7v16h-7z" /></svg>
                 LIBRARY
@@ -2747,13 +2685,11 @@ function Flow() {
                 ref={exportMenuRef}
                 style={{ position: 'relative' }}
                 onMouseEnter={() => {
-                  cancelExportMenuClose();
                   if (!isPdfExporting && !isCsvExporting) {
                     setShowExportMenu(true);
                     setShowQuickProfileMenu(false);
                   }
                 }}
-                onMouseLeave={scheduleExportMenuClose}
               >
                 <button
                   onClick={() => setShowExportMenu((v) => !v)}
@@ -2773,8 +2709,6 @@ function Flow() {
                 </button>
                 {showExportMenu && (
                   <div
-                    onMouseEnter={cancelExportMenuClose}
-                    onMouseLeave={scheduleExportMenuClose}
                     style={{
                       position: 'absolute',
                       top: '26px',
@@ -2836,11 +2770,9 @@ function Flow() {
                 ref={quickProfileRef}
                 style={{ position: 'relative' }}
                 onMouseEnter={() => {
-                  cancelQuickProfileMenuClose();
                   setShowQuickProfileMenu(true);
                   setShowExportMenu(false);
                 }}
-                onMouseLeave={scheduleQuickProfileMenuClose}
               >
                 <button
                   onClick={() => setShowQuickProfileMenu((v) => !v)}
@@ -2867,8 +2799,6 @@ function Flow() {
 
                 {showQuickProfileMenu && (
                   <div
-                    onMouseEnter={cancelQuickProfileMenuClose}
-                    onMouseLeave={scheduleQuickProfileMenuClose}
                     style={{
                       position: 'absolute',
                       top: '26px',
@@ -3004,14 +2934,9 @@ function Flow() {
 
             {/* ── Node Library Panel (Standalone) ── */}
             {showLibraryPanel && (
-              <div className="w-[clamp(220px,20vw,280px)] flex flex-col shrink-0 overflow-hidden min-h-0"
-                onMouseEnter={cancelHoverPanelClose}
-                onMouseLeave={() => {
-                  if (hoverOpenedPanel === "library") {
-                    setShowLibraryPanel(false);
-                    setHoverOpenedPanel(null);
-                  }
-                }}
+              <div
+                ref={libraryPanelRef}
+                className="w-[clamp(220px,20vw,280px)] flex flex-col shrink-0 overflow-hidden min-h-0"
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid var(--border-subtle)',
@@ -3040,14 +2965,9 @@ function Flow() {
 
             {/* ── Simulate Panel: Simulation | Results ── */}
             {showPanel && (
-              <div className="w-[clamp(300px,30vw,420px)] flex flex-col shrink-0 overflow-hidden min-h-0"
-                onMouseEnter={cancelHoverPanelClose}
-                onMouseLeave={() => {
-                  if (hoverOpenedPanel === "simulation") {
-                    setShowPanel(false);
-                    setHoverOpenedPanel(null);
-                  }
-                }}
+              <div
+                ref={simulatePanelRef}
+                className="w-[clamp(300px,30vw,420px)] flex flex-col shrink-0 overflow-hidden min-h-0"
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid var(--border-subtle)',
