@@ -10,6 +10,7 @@ import {
 } from "./CustomNode";
 import MiniCanvas from "./MiniCanvas";
 import { ICON_OPTIONS, DEFAULT_ICON, resolveNodeIcon } from "./IconCatalog";
+import { getMaterialLibraryCacheMeta, loadMaterialLibrary } from "./materials/materialLibrary";
 
 const MATH_FUNCTIONS = new Set([
     "sqrt", "abs", "max", "min", "pow", "sin", "cos", "tan", "log", "exp", "round", "Math"
@@ -264,6 +265,88 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
             nextParams[paramName] = parsed;
         }
         updateNodeData(nodeId, { sensorParams: nextParams });
+    };
+
+    const [materialLibrary, setMaterialLibrary] = useState([]);
+    const [materialLibraryLoading, setMaterialLibraryLoading] = useState(true);
+    const [materialLibraryError, setMaterialLibraryError] = useState(null);
+    const [materialSearch, setMaterialSearch] = useState("");
+    const [materialCategory, setMaterialCategory] = useState("All");
+    const [selectedMaterialId, setSelectedMaterialId] = useState(data.materialBinding?.materialId || "");
+    const materialCacheMeta = useMemo(() => getMaterialLibraryCacheMeta(), []);
+
+    useEffect(() => {
+        let cancelled = false;
+        const hydrate = async () => {
+            setMaterialLibraryLoading(true);
+            setMaterialLibraryError(null);
+            try {
+                const payload = await loadMaterialLibrary();
+                if (cancelled) return;
+                const list = Array.isArray(payload?.materials) ? payload.materials : [];
+                setMaterialLibrary(list);
+            } catch (err) {
+                if (cancelled) return;
+                setMaterialLibraryError(err?.message || "Unable to load material library");
+            } finally {
+                if (!cancelled) setMaterialLibraryLoading(false);
+            }
+        };
+        void hydrate();
+        return () => { cancelled = true; };
+    }, []);
+
+    const materialCategories = useMemo(() => {
+        const unique = Array.from(new Set(materialLibrary.map((m) => m.category || "General")));
+        return ["All", ...unique.sort((a, b) => a.localeCompare(b))];
+    }, [materialLibrary]);
+
+    const filteredMaterials = useMemo(() => {
+        const q = materialSearch.trim().toLowerCase();
+        return materialLibrary.filter((material) => {
+            const categoryOk = materialCategory === "All" || (material.category || "General") === materialCategory;
+            if (!categoryOk) return false;
+            if (!q) return true;
+            const bag = [
+                material.name,
+                material.grade,
+                material.category,
+                material.description,
+                Object.keys(material.constants || {}).join(" "),
+            ].join(" ").toLowerCase();
+            return bag.includes(q);
+        });
+    }, [materialLibrary, materialCategory, materialSearch]);
+
+    const selectedMaterial = useMemo(() => {
+        if (!selectedMaterialId) return null;
+        return materialLibrary.find((m) => m.id === selectedMaterialId) || null;
+    }, [materialLibrary, selectedMaterialId]);
+
+    useEffect(() => {
+        const bound = data.materialBinding?.materialId || "";
+        if (bound && bound !== selectedMaterialId) {
+            setSelectedMaterialId(bound);
+        }
+    }, [data.materialBinding?.materialId, selectedMaterialId]);
+
+    const handleApplyMaterial = () => {
+        if (!selectedMaterial) return;
+        const constants = selectedMaterial.constants || {};
+        const nextSensorParams = { ...sensorParams, ...constants };
+        updateNodeData(nodeId, {
+            sensorParams: nextSensorParams,
+            materialBinding: {
+                materialId: selectedMaterial.id,
+                materialName: selectedMaterial.name,
+                category: selectedMaterial.category,
+                grade: selectedMaterial.grade || "",
+                source: selectedMaterial.source || "",
+                constantsApplied: Object.keys(constants),
+                libraryVersion: materialCacheMeta.version || "unknown",
+                appliedAt: new Date().toISOString(),
+            },
+        });
     };
 
     const handleDisplayNameChange = (e) => updateNodeData(nodeId, { displayName: e.target.value });
@@ -575,6 +658,125 @@ export default function NodeInspectorPanel({ nodeId, onClose, activeScenarioId, 
                                     </div>
                                 ))}
                             </div>
+                        </div>
+
+                        <div className="p-3 rounded-sm border" style={{
+                            background: "rgba(255,255,255,0.01)",
+                            borderColor: "var(--border-technical)",
+                        }}>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-[8px] uppercase tracking-[0.25em] font-bold flex items-center gap-1.5" style={{ color: "var(--primary)", margin: 0 }}>
+                                    MATERIAL_LIBRARY
+                                </p>
+                                <span style={{
+                                    fontSize: "7px", fontWeight: "bold", color: "var(--text-secondary)",
+                                    padding: "1px 6px", borderRadius: "2px", border: "1px solid var(--border-subtle)"
+                                }}>
+                                    LOCAL_OFFLINE
+                                </span>
+                            </div>
+                            <p className="text-[7px] mb-2" style={{ color: "var(--text-muted)" }}>
+                                Built-in material constants load in background and are cached locally for simulation use.
+                            </p>
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                                <input
+                                    type="text"
+                                    value={materialSearch}
+                                    onChange={(e) => setMaterialSearch(e.target.value)}
+                                    placeholder="Search material..."
+                                    style={{
+                                        background: "var(--bg-surface)",
+                                        border: "1px solid var(--border-subtle)",
+                                        borderRadius: "6px",
+                                        padding: "5px 8px",
+                                        fontSize: "10px",
+                                        color: "var(--text-primary)",
+                                        outline: "none",
+                                    }}
+                                />
+                                <select
+                                    value={materialCategory}
+                                    onChange={(e) => setMaterialCategory(e.target.value)}
+                                    style={{
+                                        background: "var(--bg-surface)",
+                                        border: "1px solid var(--border-subtle)",
+                                        borderRadius: "6px",
+                                        padding: "5px 8px",
+                                        fontSize: "10px",
+                                        color: "var(--text-primary)",
+                                        outline: "none",
+                                    }}
+                                >
+                                    {materialCategories.map((category) => (
+                                        <option key={category} value={category}>{category}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <select
+                                value={selectedMaterialId}
+                                onChange={(e) => setSelectedMaterialId(e.target.value)}
+                                style={{
+                                    width: "100%",
+                                    background: "var(--bg-surface)",
+                                    border: "1px solid var(--border-subtle)",
+                                    borderRadius: "6px",
+                                    padding: "5px 8px",
+                                    fontSize: "10px",
+                                    color: "var(--text-primary)",
+                                    outline: "none",
+                                    marginBottom: "8px",
+                                }}
+                            >
+                                <option value="">Select material...</option>
+                                {filteredMaterials.map((material) => (
+                                    <option key={material.id} value={material.id}>
+                                        {material.name} {material.grade ? `(${material.grade})` : ""} - {material.category}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={handleApplyMaterial}
+                                disabled={!selectedMaterial || materialLibraryLoading}
+                                style={{
+                                    width: "100%",
+                                    background: !selectedMaterial || materialLibraryLoading ? "rgba(100,160,220,0.08)" : "var(--primary-dim)",
+                                    border: `1px solid ${!selectedMaterial || materialLibraryLoading ? "var(--border-subtle)" : "var(--primary-glow)"}`,
+                                    color: !selectedMaterial || materialLibraryLoading ? "var(--text-muted)" : "var(--primary)",
+                                    borderRadius: "6px",
+                                    padding: "6px 8px",
+                                    fontSize: "9px",
+                                    fontWeight: 800,
+                                    letterSpacing: "0.08em",
+                                    cursor: !selectedMaterial || materialLibraryLoading ? "not-allowed" : "pointer",
+                                    textTransform: "uppercase",
+                                    marginBottom: "8px",
+                                }}
+                            >
+                                {materialLibraryLoading ? "LOADING MATERIALS..." : "APPLY MATERIAL CONSTANTS"}
+                            </button>
+                            {materialLibraryError && (
+                                <p className="text-[8px]" style={{ color: "var(--status-err)", margin: "0 0 6px 0" }}>
+                                    {materialLibraryError}
+                                </p>
+                            )}
+                            {selectedMaterial && (
+                                <div className="p-2 rounded-sm border" style={{ borderColor: "var(--border-subtle)", background: "rgba(0,0,0,0.2)" }}>
+                                    <p className="text-[9px] font-bold" style={{ color: "var(--text-primary)", margin: 0 }}>
+                                        {selectedMaterial.name} {selectedMaterial.grade ? `(${selectedMaterial.grade})` : ""}
+                                    </p>
+                                    <p className="text-[7px] mt-1" style={{ color: "var(--text-muted)", marginBottom: "4px" }}>
+                                        {selectedMaterial.description}
+                                    </p>
+                                    <p className="text-[7px]" style={{ color: "#8fb4de", margin: 0 }}>
+                                        Constants: {Object.keys(selectedMaterial.constants || {}).length} • Source: {selectedMaterial.source}
+                                    </p>
+                                </div>
+                            )}
+                            {data.materialBinding?.materialId && (
+                                <p className="text-[7px] mt-2" style={{ color: "#9bd6ff", margin: 0 }}>
+                                    Bound: {data.materialBinding.materialName} • Lib v{data.materialBinding.libraryVersion || materialCacheMeta.version}
+                                </p>
+                            )}
                         </div>
 
                         {/* Experiment Variable Ranges (if any) or Custom Config */}

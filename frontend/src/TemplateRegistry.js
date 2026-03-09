@@ -1007,6 +1007,129 @@ const TemplateRegistry = [
       },
     ],
   },
+  {
+    id: "dc-motor-digital-twin",
+    name: "DC Motor Digital Twin",
+    desc: "Electrical, torque, and mechanical state equations chained into a digital twin style motor simulation.",
+    icon: "⚙️",
+    complexity: 6,
+    nodes: [
+      {
+        id: "tpl-dc-electrical",
+        type: "custom_formula",
+        position: { x: 80, y: 210 },
+        data: {
+          label: "Electrical Subsystem",
+          description: "PWM to armature electrical model with back-EMF compensation.",
+          customInputs: [
+            "supply_voltage",
+            "duty_cycle",
+            "armature_resistance",
+            "armature_inductance",
+            "winding_current_prev",
+            "back_emf_constant",
+            "shaft_speed_rpm",
+          ],
+          customOutputs: ["applied_voltage", "back_emf", "winding_current"],
+          customFormulas: {
+            applied_voltage: "supply_voltage * duty_cycle",
+            back_emf: "back_emf_constant * ((2 * Math.PI * shaft_speed_rpm) / 60)",
+            winding_current: "((applied_voltage - back_emf) / armature_resistance) + (winding_current_prev * Math.exp(-armature_resistance / Math.max(armature_inductance, 0.0001)))",
+          },
+        },
+      },
+      {
+        id: "tpl-dc-torque",
+        type: "custom_formula",
+        position: { x: 380, y: 170 },
+        data: {
+          label: "Electromagnetic Torque",
+          description: "Current to torque conversion with load and friction losses.",
+          customInputs: ["winding_current", "torque_constant", "load_torque", "friction_coeff", "shaft_speed_rpm"],
+          customOutputs: ["electromagnetic_torque", "net_torque"],
+          customFormulas: {
+            electromagnetic_torque: "torque_constant * winding_current",
+            net_torque: "electromagnetic_torque - load_torque - (friction_coeff * shaft_speed_rpm)",
+          },
+        },
+      },
+      {
+        id: "tpl-dc-mechanical",
+        type: "custom_formula",
+        position: { x: 700, y: 170 },
+        data: {
+          label: "Mechanical Dynamics",
+          description: "Net torque and inertia to update rotor speed per simulation step.",
+          customInputs: ["net_torque", "inertia_j", "time_step", "shaft_speed_rpm"],
+          customOutputs: ["angular_accel", "shaft_speed_rpm_next"],
+          customFormulas: {
+            angular_accel: "net_torque / Math.max(inertia_j, 0.00001)",
+            shaft_speed_rpm_next: "shaft_speed_rpm + (((angular_accel * 60) / (2 * Math.PI)) * time_step)",
+          },
+        },
+      },
+      {
+        id: "tpl-dc-performance",
+        type: "custom_formula",
+        position: { x: 1030, y: 210 },
+        data: {
+          label: "Motor Performance",
+          description: "Power flow and efficiency outputs for the digital twin report.",
+          customInputs: ["applied_voltage", "winding_current", "electromagnetic_torque", "shaft_speed_rpm_next"],
+          customOutputs: ["electrical_power", "mechanical_power", "efficiency_percent"],
+          customFormulas: {
+            electrical_power: "applied_voltage * winding_current",
+            mechanical_power: "electromagnetic_torque * ((2 * Math.PI * shaft_speed_rpm_next) / 60)",
+            efficiency_percent: "(mechanical_power / Math.max(electrical_power, 0.0001)) * 100",
+          },
+        },
+      },
+    ],
+    edges: [
+      {
+        id: "tpl-dc-edge-1",
+        source: "tpl-dc-electrical",
+        sourceHandle: "winding_current",
+        target: "tpl-dc-torque",
+        targetHandle: "winding_current",
+      },
+      {
+        id: "tpl-dc-edge-2",
+        source: "tpl-dc-torque",
+        sourceHandle: "net_torque",
+        target: "tpl-dc-mechanical",
+        targetHandle: "net_torque",
+      },
+      {
+        id: "tpl-dc-edge-3",
+        source: "tpl-dc-electrical",
+        sourceHandle: "applied_voltage",
+        target: "tpl-dc-performance",
+        targetHandle: "applied_voltage",
+      },
+      {
+        id: "tpl-dc-edge-4",
+        source: "tpl-dc-electrical",
+        sourceHandle: "winding_current",
+        target: "tpl-dc-performance",
+        targetHandle: "winding_current",
+      },
+      {
+        id: "tpl-dc-edge-5",
+        source: "tpl-dc-torque",
+        sourceHandle: "electromagnetic_torque",
+        target: "tpl-dc-performance",
+        targetHandle: "electromagnetic_torque",
+      },
+      {
+        id: "tpl-dc-edge-6",
+        source: "tpl-dc-mechanical",
+        sourceHandle: "shaft_speed_rpm_next",
+        target: "tpl-dc-performance",
+        targetHandle: "shaft_speed_rpm_next",
+      },
+    ],
+  },
 ];
 
 export default TemplateRegistry;
