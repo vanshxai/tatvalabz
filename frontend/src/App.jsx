@@ -4,7 +4,7 @@
  * industrial glow accents, and refined visual hierarchy.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -27,8 +27,6 @@ import DeletableEdge from "./DeletableEdge";
 import { getUnconnectedInputs, compileGraphToBackendJSON, compileSkeletonToFormulas, validatePayload } from "./GraphCompiler";
 import TemplateRegistry from "./TemplateRegistry";
 import LandingPage from "./LandingPage";
-import AuthScope from "./AuthScope";
-import OnboardingModal from "./OnboardingModal";
 import NodeInspectorPanel from "./NodeInspectorPanel";
 import ResultsDashboard from "./ResultsDashboard";
 import ExecutionTrace from "./ExecutionTrace";
@@ -46,8 +44,51 @@ const nodeTypes = { customNode: CustomNode };
 const edgeTypes = { deletable: DeletableEdge };
 const WORKSPACE_DRAFT_KEY = "faulter_workspace_draft";
 const WORKSPACE_ACTIVE_SESSION_KEY = "faulter_workspace_active_session";
-const AUTH_PROFILE_KEY_PREFIX = "faulter_auth_profile";
-const ONBOARDING_DONE_KEY_PREFIX = "faulter_onboarding_done";
+const WORKSPACE_OPENED_THIS_TAB_KEY = "faulter_workspace_opened_this_tab";
+const WORKSPACE_LAUNCH_INTENT_KEY = "faulter_workspace_launch_intent";
+
+class LandingErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {}
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
+class WorkspaceErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error) {
+    this.setState({ error });
+  }
+  render() {
+    if (this.state.hasError) {
+      if (typeof this.props.fallback === "function") {
+        return this.props.fallback(this.state.error);
+      }
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+const WORKSPACE_ACTIVE_AT_KEY = "faulter_workspace_active_at";
+const WORKSPACE_RESUME_INTENT_AT_KEY = "faulter_workspace_resume_intent_at";
+const WORKSPACE_RESUME_TTL_MS = 30 * 60 * 1000;
+const WORKSPACE_RESUME_INTENT_TTL_MS = 20 * 1000;
 const WORKSPACE_DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.9 };
 const WORKSPACE_MIN_ZOOM = 0.72;
 const WORKSPACE_MAX_ZOOM = 1.5;
@@ -124,8 +165,6 @@ const getSweepRunCountFromResult = (result) => {
   return 0;
 };
 
-const getAuthProfileStorageKey = (userId) => `${AUTH_PROFILE_KEY_PREFIX}_${userId}`;
-const getOnboardingDoneStorageKey = (userId) => `${ONBOARDING_DONE_KEY_PREFIX}_${userId}`;
 
 const resolveNodeInputAutofillValue = (node, inputName) => {
   if (!node || !inputName) return null;
@@ -159,17 +198,14 @@ function TemplateSummary({ template }) {
   );
 }
 
-function Flow() {
+function Flow({ isStarted, onExit }) {
   const reactFlowWrapper = useRef(null);
   const quickProfileRef = useRef(null);
   const exportMenuRef = useRef(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authSession, setAuthSession] = useState(null);
-  const [showAuthScope, setShowAuthScope] = useState(false);
-  const [authMode, setAuthMode] = useState("signin");
-  const [pendingLaunchAfterAuth, setPendingLaunchAfterAuth] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [authProfile, setAuthProfile] = useState(null);
+  const simulateBtnRef = useRef(null);
+  const libraryBtnRef = useRef(null);
+  const simulatePanelRef = useRef(null);
+  const libraryPanelRef = useRef(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [rfInstance, setRfInstance] = useState(null);
@@ -190,13 +226,6 @@ function Flow() {
   const [activeScenarioId, setActiveScenarioId] = useState(null);
   const [activeSection, setActiveSection] = useState("workspace");
   const [activeSkeletonNodeId, setActiveSkeletonNodeId] = useState(null);
-  const [isStarted, setIsStarted] = useState(() => {
-    try {
-      return sessionStorage.getItem(WORKSPACE_ACTIVE_SESSION_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [inspectedNodeId, setInspectedNodeId] = useState(null);
@@ -207,9 +236,12 @@ function Flow() {
   const [projectSearch, setProjectSearch] = useState('');
   const [showQuickProfileMenu, setShowQuickProfileMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [hoverOpenedPanel, setHoverOpenedPanel] = useState(null);
   const [isCsvExporting, setIsCsvExporting] = useState(false);
   const [isPdfExporting, setIsPdfExporting] = useState(false);
+  const [externalDevices, setExternalDevices] = useState(null);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [devicesError, setDevicesError] = useState(null);
+  const [devicesTab, setDevicesTab] = useState("serial");
   const [executionRecords, setExecutionRecords] = useState([]);
   const [activeCalculationPreview, setActiveCalculationPreview] = useState(null);
   const [selectedCalculationByProject, setSelectedCalculationByProject] = useState({});
@@ -220,7 +252,6 @@ function Flow() {
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pyodideStatus, setPyodideStatus] = useState('Initializing...');
   const solveResolverRef = useRef(null);
-  const hoverPanelCloseTimeoutRef = useRef(null);
   const exportMenuCloseTimeoutRef = useRef(null);
   const quickProfileMenuCloseTimeoutRef = useRef(null);
 
@@ -258,10 +289,6 @@ function Flow() {
 
   useEffect(() => {
     return () => {
-      if (hoverPanelCloseTimeoutRef.current) {
-        clearTimeout(hoverPanelCloseTimeoutRef.current);
-        hoverPanelCloseTimeoutRef.current = null;
-      }
       if (exportMenuCloseTimeoutRef.current) {
         clearTimeout(exportMenuCloseTimeoutRef.current);
         exportMenuCloseTimeoutRef.current = null;
@@ -307,83 +334,69 @@ function Flow() {
     }, 220);
   }, [cancelQuickProfileMenuClose]);
 
-  const scheduleHoverPanelClose = useCallback(() => {
-    if (hoverPanelCloseTimeoutRef.current) clearTimeout(hoverPanelCloseTimeoutRef.current);
-    hoverPanelCloseTimeoutRef.current = setTimeout(() => {
-      if (hoverOpenedPanel === "simulation") setShowPanel(false);
-      if (hoverOpenedPanel === "library") setShowLibraryPanel(false);
-      setHoverOpenedPanel(null);
-      hoverPanelCloseTimeoutRef.current = null;
-    }, 120);
-  }, [hoverOpenedPanel]);
-
-  const cancelHoverPanelClose = useCallback(() => {
-    if (hoverPanelCloseTimeoutRef.current) {
-      clearTimeout(hoverPanelCloseTimeoutRef.current);
-      hoverPanelCloseTimeoutRef.current = null;
+  useEffect(() => {
+    // Force landing page until user explicitly launches workspace.
+    try {
+      sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
+      sessionStorage.removeItem(WORKSPACE_ACTIVE_AT_KEY);
+      sessionStorage.removeItem(WORKSPACE_RESUME_INTENT_AT_KEY);
+      sessionStorage.removeItem(WORKSPACE_OPENED_THIS_TAB_KEY);
+      sessionStorage.removeItem(WORKSPACE_LAUNCH_INTENT_KEY);
+    } catch {
+      // Ignore sessionStorage write failures.
     }
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const syncAuthState = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!isMounted) return;
-        const session = data?.session ?? null;
-        setAuthSession(session);
-
-        if (session?.user?.id) {
-          const profileKey = getAuthProfileStorageKey(session.user.id);
-          const onboardingKey = getOnboardingDoneStorageKey(session.user.id);
-          const rawProfile = localStorage.getItem(profileKey);
-          setAuthProfile(rawProfile ? JSON.parse(rawProfile) : null);
-          setShowOnboarding(localStorage.getItem(onboardingKey) !== "1");
-        } else {
-          setAuthProfile(null);
-          setShowOnboarding(false);
-          setIsStarted(false);
-        }
-      } catch {
-        if (isMounted) setAuthSession(null);
-      } finally {
-        if (isMounted) setAuthLoading(false);
+    const handleOutsidePanels = (e) => {
+      if (showPanel) {
+        const insidePanel = simulatePanelRef.current && simulatePanelRef.current.contains(e.target);
+        const insideButton = simulateBtnRef.current && simulateBtnRef.current.contains(e.target);
+        if (!insidePanel && !insideButton) setShowPanel(false);
+      }
+      if (showLibraryPanel) {
+        const insidePanel = libraryPanelRef.current && libraryPanelRef.current.contains(e.target);
+        const insideButton = libraryBtnRef.current && libraryBtnRef.current.contains(e.target);
+        if (!insidePanel && !insideButton) setShowLibraryPanel(false);
       }
     };
-
-    syncAuthState();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthSession(session ?? null);
-      if (!session?.user?.id) {
-        setAuthProfile(null);
-        setShowOnboarding(false);
-        setIsStarted(false);
-        try {
-          sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
-        } catch {
-          // Ignore sessionStorage failures.
-        }
-        return;
-      }
-
-      try {
-        const profileKey = getAuthProfileStorageKey(session.user.id);
-        const onboardingKey = getOnboardingDoneStorageKey(session.user.id);
-        const rawProfile = localStorage.getItem(profileKey);
-        setAuthProfile(rawProfile ? JSON.parse(rawProfile) : null);
-        setShowOnboarding(localStorage.getItem(onboardingKey) !== "1");
-      } catch {
-        setShowOnboarding(true);
-      }
-    });
-
+    document.addEventListener("mousedown", handleOutsidePanels);
+    document.addEventListener("touchstart", handleOutsidePanels);
     return () => {
-      isMounted = false;
-      authListener?.subscription?.unsubscribe();
+      document.removeEventListener("mousedown", handleOutsidePanels);
+      document.removeEventListener("touchstart", handleOutsidePanels);
     };
-  }, []);
+  }, [showPanel, showLibraryPanel]);
+
+  useEffect(() => {
+    if (!isStarted) return;
+    const touchActiveAt = () => {
+      try {
+        sessionStorage.setItem(WORKSPACE_ACTIVE_AT_KEY, String(Date.now()));
+      } catch {
+        // Ignore sessionStorage write failures.
+      }
+    };
+    const markResumeIntent = () => {
+      try {
+        sessionStorage.setItem(WORKSPACE_RESUME_INTENT_AT_KEY, String(Date.now()));
+      } catch {
+        // Ignore sessionStorage write failures.
+      }
+    };
+    const events = ["pointerdown", "keydown", "touchstart"];
+    events.forEach((evt) => window.addEventListener(evt, touchActiveAt, { passive: true }));
+    window.addEventListener("beforeunload", markResumeIntent);
+    const heartbeat = setInterval(touchActiveAt, 60 * 1000);
+    touchActiveAt();
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, touchActiveAt));
+      window.removeEventListener("beforeunload", markResumeIntent);
+      clearInterval(heartbeat);
+    };
+  }, [isStarted]);
+
+  // Auth + licensing flows removed.
 
   // ── Initialize Pyodide WebWorker ──
   useEffect(() => {
@@ -1080,10 +1093,35 @@ function Flow() {
     showToast(`📝 Loaded template "${template.name}"`, "success");
   };
 
-  const showToast = useCallback((message, type = "error") => {
+  function showToast(message, type = "error") {
     setConnectionToast({ message, type });
     setTimeout(() => setConnectionToast(null), 3000);
+  }
+
+  const fetchExternalDevices = useCallback(async () => {
+    setDevicesError(null);
+    setDevicesLoading(true);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch("http://127.0.0.1:8787/devices", { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`Agent error ${res.status}`);
+      const data = await res.json();
+      setExternalDevices(data);
+    } catch (err) {
+      setExternalDevices(null);
+      setDevicesError(err?.message || "Agent not reachable");
+    } finally {
+      setDevicesLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (activeSection === "external_devices") {
+      fetchExternalDevices();
+    }
+  }, [activeSection, fetchExternalDevices]);
 
   const getExportFileBaseName = useCallback(() => {
     const base = (currentProjectName || "tatvalabz_workflow")
@@ -2478,63 +2516,30 @@ function Flow() {
     showToast("Calculation record deleted", "success");
   };
 
-  const activeUser = authSession?.user || null;
-
   function getAutofillValueForInput(nodeId, inputName, nodeList = nodes) {
     const node = (nodeList || []).find((n) => n.id === nodeId);
     return resolveNodeInputAutofillValue(node, inputName);
   }
 
-  const handleCompleteOnboarding = useCallback(async (profile) => {
-    if (!activeUser?.id) {
-      setShowOnboarding(false);
-      return;
-    }
-
-    try {
-      const profileKey = getAuthProfileStorageKey(activeUser.id);
-      const onboardingKey = getOnboardingDoneStorageKey(activeUser.id);
-      localStorage.setItem(profileKey, JSON.stringify(profile));
-      localStorage.setItem(onboardingKey, "1");
-      setAuthProfile(profile);
-      setShowOnboarding(false);
-
-      // Optional cloud profile write (safe no-op if table doesn't exist yet).
-      await supabase.from("profiles").upsert({
-        id: activeUser.id,
-        email: activeUser.email,
-        full_name: profile.fullName || null,
-        organization: profile.organization || null,
-        role: profile.role || null,
-        use_case: profile.useCase || null,
-        storage_plan: profile.storagePlan || "local-first",
-        updated_at: new Date().toISOString(),
-      });
-    } catch (err) {
-      console.warn("Onboarding profile saved locally only:", err?.message || err);
-    }
-  }, [activeUser]);
-
-  // ── View Switching Logic ──
-  const openAuthFlow = useCallback((mode = "signin", launchAfterAuth = false) => {
-    setAuthMode(mode === "signup" ? "signup" : "signin");
-    setPendingLaunchAfterAuth(Boolean(launchAfterAuth));
-    setShowAuthScope(true);
-  }, []);
-
-  const handleAuthSuccess = useCallback(() => {
-    setShowAuthScope(false);
-  }, []);
-
-  const handleLaunchWorkspace = () => {
+  const handleSignOut = async () => {
+    setShowQuickProfileMenu(false);
+    setShowPanel(false);
+    setShowLibraryPanel(false);
+    setInspectedNodeId(null);
+    setActiveSkeletonNodeId(null);
     setActiveSection("workspace");
-    setIsStarted(true);
+    onExit?.();
     try {
-      sessionStorage.setItem(WORKSPACE_ACTIVE_SESSION_KEY, "1");
+      sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
+      sessionStorage.removeItem(WORKSPACE_ACTIVE_AT_KEY);
+      sessionStorage.removeItem(WORKSPACE_RESUME_INTENT_AT_KEY);
     } catch {
       // Ignore sessionStorage write failures and keep in-memory state.
     }
   };
+
+  // Auth/admin/token flows removed.
+
   const handleCloseWorkspace = async () => {
     const canProceed = await confirmProceedWithPotentialDataLoss("signing out");
     if (!canProceed) return;
@@ -2545,34 +2550,20 @@ function Flow() {
     setInspectedNodeId(null);
     setActiveSkeletonNodeId(null);
     setActiveSection("workspace");
-    setIsStarted(false);
+    onExit?.();
     try {
       sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
+      sessionStorage.removeItem(WORKSPACE_ACTIVE_AT_KEY);
+      sessionStorage.removeItem(WORKSPACE_RESUME_INTENT_AT_KEY);
+      sessionStorage.removeItem(WORKSPACE_OPENED_THIS_TAB_KEY);
+      sessionStorage.removeItem(WORKSPACE_LAUNCH_INTENT_KEY);
     } catch {
       // Ignore sessionStorage write failures and keep in-memory state.
     }
+    // Return to landing in-app without hard routing.
   };
 
-  useEffect(() => {
-    if (!authSession || !pendingLaunchAfterAuth) return;
-    setPendingLaunchAfterAuth(false);
-    setShowAuthScope(false);
-    setActiveSection("workspace");
-    setIsStarted(true);
-    try {
-      sessionStorage.setItem(WORKSPACE_ACTIVE_SESSION_KEY, "1");
-    } catch {
-      // Ignore sessionStorage write failures and keep in-memory state.
-    }
-  }, [authSession, pendingLaunchAfterAuth]);
-
-  if (!isStarted) {
-    return (
-      <>
-        <LandingPage onStart={handleLaunchWorkspace} />
-      </>
-    );
-  }
+  // Auth launch flow removed.
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col font-sans transition-colors duration-300 ${darkMode ? "dark-mode" : "light-mode"}`}
@@ -2705,26 +2696,16 @@ function Flow() {
 
               {/* Simulate */}
               <button
+                ref={simulateBtnRef}
                 onClick={() => {
-                  setHoverOpenedPanel(null);
-                  cancelHoverPanelClose();
                   setShowPanel((v) => {
                     const next = !v;
                     if (next) setActiveTab("simulation");
                     return next;
                   });
                   setShowLibraryPanel(false);
-                }}
-                onMouseEnter={(e) => {
-                  cancelHoverPanelClose();
-                  setHoverOpenedPanel("simulation");
-                  setShowPanel(true);
-                  setActiveTab("simulation");
-                  setShowLibraryPanel(false);
                   setShowExportMenu(false);
                   setShowQuickProfileMenu(false);
-                  e.currentTarget.style.background = 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)';
-                  e.currentTarget.style.borderColor = 'var(--primary)';
                 }}
                 title="Simulate"
                 className="action-icon-btn"
@@ -2737,7 +2718,6 @@ function Flow() {
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = showPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)';
                   e.currentTarget.style.borderColor = showPanel ? 'var(--primary)' : 'var(--primary-glow)';
-                  scheduleHoverPanelClose();
                 }}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l10 6-10 6V6z" /></svg>
@@ -2746,21 +2726,12 @@ function Flow() {
 
               {/* Node Library — icon only */}
               <button
+                ref={libraryBtnRef}
                 onClick={() => {
-                  setHoverOpenedPanel(null);
-                  cancelHoverPanelClose();
                   setShowLibraryPanel((v) => !v);
-                  setShowPanel(false);
-                }}
-                onMouseEnter={(e) => {
-                  cancelHoverPanelClose();
-                  setHoverOpenedPanel("library");
-                  setShowLibraryPanel(true);
                   setShowPanel(false);
                   setShowExportMenu(false);
                   setShowQuickProfileMenu(false);
-                  e.currentTarget.style.background = 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)';
-                  e.currentTarget.style.borderColor = 'var(--primary)';
                 }}
                 title="Node Library"
                 className="action-icon-btn"
@@ -2773,7 +2744,6 @@ function Flow() {
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = showLibraryPanel ? 'color-mix(in oklab, var(--primary-dim) 78%, white 22%)' : 'var(--primary-dim)';
                   e.currentTarget.style.borderColor = showLibraryPanel ? 'var(--primary)' : 'var(--primary-glow)';
-                  scheduleHoverPanelClose();
                 }}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v16H4zM13 4h7v16h-7z" /></svg>
@@ -2784,14 +2754,6 @@ function Flow() {
               <div
                 ref={exportMenuRef}
                 style={{ position: 'relative' }}
-                onMouseEnter={() => {
-                  cancelExportMenuClose();
-                  if (!isPdfExporting && !isCsvExporting) {
-                    setShowExportMenu(true);
-                    setShowQuickProfileMenu(false);
-                  }
-                }}
-                onMouseLeave={scheduleExportMenuClose}
               >
                 <button
                   onClick={() => setShowExportMenu((v) => !v)}
@@ -2811,8 +2773,6 @@ function Flow() {
                 </button>
                 {showExportMenu && (
                   <div
-                    onMouseEnter={cancelExportMenuClose}
-                    onMouseLeave={scheduleExportMenuClose}
                     style={{
                       position: 'absolute',
                       top: '26px',
@@ -2873,12 +2833,6 @@ function Flow() {
               <div
                 ref={quickProfileRef}
                 style={{ position: 'relative' }}
-                onMouseEnter={() => {
-                  cancelQuickProfileMenuClose();
-                  setShowQuickProfileMenu(true);
-                  setShowExportMenu(false);
-                }}
-                onMouseLeave={scheduleQuickProfileMenuClose}
               >
                 <button
                   onClick={() => setShowQuickProfileMenu((v) => !v)}
@@ -2905,8 +2859,6 @@ function Flow() {
 
                 {showQuickProfileMenu && (
                   <div
-                    onMouseEnter={cancelQuickProfileMenuClose}
-                    onMouseLeave={scheduleQuickProfileMenuClose}
                     style={{
                       position: 'absolute',
                       top: '26px',
@@ -2943,7 +2895,7 @@ function Flow() {
                     <button
                       onClick={() => {
                         setShowQuickProfileMenu(false);
-                        handleCloseWorkspace();
+                        handleSignOut();
                       }}
                       style={{
                         width: '100%',
@@ -3043,13 +2995,7 @@ function Flow() {
             {/* ── Node Library Panel (Standalone) ── */}
             {showLibraryPanel && (
               <div className="w-[clamp(220px,20vw,280px)] flex flex-col shrink-0 overflow-hidden min-h-0"
-                onMouseEnter={cancelHoverPanelClose}
-                onMouseLeave={() => {
-                  if (hoverOpenedPanel === "library") {
-                    setShowLibraryPanel(false);
-                    setHoverOpenedPanel(null);
-                  }
-                }}
+                ref={libraryPanelRef}
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid var(--border-subtle)',
@@ -3079,13 +3025,7 @@ function Flow() {
             {/* ── Simulate Panel: Simulation | Results ── */}
             {showPanel && (
               <div className="w-[clamp(300px,30vw,420px)] flex flex-col shrink-0 overflow-hidden min-h-0"
-                onMouseEnter={cancelHoverPanelClose}
-                onMouseLeave={() => {
-                  if (hoverOpenedPanel === "simulation") {
-                    setShowPanel(false);
-                    setHoverOpenedPanel(null);
-                  }
-                }}
+                ref={simulatePanelRef}
                 style={{
                   ...glassStyle,
                   borderLeft: '1px solid var(--border-subtle)',
@@ -3412,6 +3352,7 @@ function Flow() {
               <h1 className="text-lg font-bold capitalize" style={{ color: '#e2e8f0' }}>
                 {activeSection === "saved" ? "Saved Projects" :
                   activeSection === "saved_calculations" ? "Saved Calculations" :
+                  activeSection === "external_devices" ? "External Devices" :
                   activeSection === "help" ? "Help & Documentation" : activeSection}
               </h1>
             </div>
@@ -3968,6 +3909,171 @@ function Flow() {
               </div>
             )}
 
+            {activeSection === "external_devices" && (
+              <div className="max-w-4xl mx-auto p-8">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold" style={{ color: "#e2e8f0" }}>External Devices</h2>
+                    <p className="text-xs" style={{ color: "#8fb4de" }}>
+                      Reads the local agent at `127.0.0.1:8787`. This must run on the same machine as your browser.
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchExternalDevices}
+                    className="px-3 py-1 text-[11px] uppercase tracking-[0.2em] rounded-sm"
+                    style={{
+                      background: 'rgba(34, 211, 238, 0.1)',
+                      border: '1px solid rgba(34, 211, 238, 0.4)',
+                      color: '#67e8f9',
+                    }}
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="p-4 rounded-sm mb-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border-technical)" }}>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>
+                        Local Agent
+                      </div>
+                      <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>
+                        Download and run the TatvaLabz Agent
+                      </div>
+                      <p className="text-[11px] mt-1" style={{ color: "#94a3b8" }}>
+                        Install on the same device running this browser to list USB/Serial/LAN ports.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href="/agent-downloads/tatvalabz-agent-macos.dmg"
+                        className="px-3 py-2 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+                        style={{ background: "rgba(34, 211, 238, 0.1)", border: "1px solid rgba(34, 211, 238, 0.4)", color: "#67e8f9" }}
+                      >
+                        macOS
+                      </a>
+                      <a
+                        href="/agent-downloads/tatvalabz-agent-windows.exe"
+                        className="px-3 py-2 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+                        style={{ background: "rgba(34, 211, 238, 0.1)", border: "1px solid rgba(34, 211, 238, 0.4)", color: "#67e8f9" }}
+                      >
+                        Windows
+                      </a>
+                      <a
+                        href="/agent-downloads/tatvalabz-agent-linux.AppImage"
+                        className="px-3 py-2 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+                        style={{ background: "rgba(34, 211, 238, 0.1)", border: "1px solid rgba(34, 211, 238, 0.4)", color: "#67e8f9" }}
+                      >
+                        Linux
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                {devicesLoading && (
+                  <div className="p-4 rounded-sm" style={{ background: "var(--bg-card)", border: "1px solid var(--border-technical)" }}>
+                    <p className="text-xs" style={{ color: "#93c5fd" }}>Scanning local ports...</p>
+                  </div>
+                )}
+
+                {devicesError && !devicesLoading && (
+                  <div className="p-4 rounded-sm" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+                    <p className="text-xs" style={{ color: "#fca5a5" }}>
+                      Agent not reachable. Start the local agent and refresh.
+                    </p>
+                    <p className="text-[11px]" style={{ color: "#fca5a5" }}>{devicesError}</p>
+                  </div>
+                )}
+
+                {externalDevices && !devicesLoading && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {[
+                        { label: "Serial Ports", value: externalDevices.serial?.length ?? 0 },
+                        { label: "USB Devices", value: externalDevices.usb?.length ?? 0 },
+                        { label: "Network Interfaces", value: externalDevices.network?.length ?? 0 },
+                      ].map((card) => (
+                        <div key={card.label} className="p-4 rounded-sm" style={{ background: "var(--bg-card)", border: "1px solid var(--border-technical)" }}>
+                          <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>{card.label}</div>
+                          <div className="text-2xl font-bold" style={{ color: "#e2e8f0" }}>{card.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="p-4 rounded-sm" style={{ background: "var(--bg-card)", border: "1px solid var(--border-technical)" }}>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {[
+                          { id: "serial", label: "Serial" },
+                          { id: "usb", label: "USB" },
+                          { id: "network", label: "Network" },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            onClick={() => setDevicesTab(tab.id)}
+                            className="px-3 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+                            style={{
+                              background: devicesTab === tab.id ? "rgba(34, 211, 238, 0.14)" : "rgba(34, 211, 238, 0.04)",
+                              border: devicesTab === tab.id ? "1px solid rgba(34, 211, 238, 0.5)" : "1px solid rgba(34, 211, 238, 0.15)",
+                              color: devicesTab === tab.id ? "#67e8f9" : "#8fb4de",
+                            }}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {devicesTab === "serial" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Serial</h3>
+                          {externalDevices.serial?.length ? (
+                            <ul className="text-xs" style={{ color: "#cbd5e1" }}>
+                              {externalDevices.serial.map((port) => (
+                                <li key={port}>{port}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No serial devices detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "usb" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>USB</h3>
+                          {externalDevices.usb?.length ? (
+                            <ul className="text-xs" style={{ color: "#cbd5e1" }}>
+                              {externalDevices.usb.map((usb, idx) => (
+                                <li key={`${usb}-${idx}`}>{usb}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No USB devices detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "network" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Network</h3>
+                          {externalDevices.network?.length ? (
+                            <div className="space-y-2">
+                              {externalDevices.network.map((iface, idx) => (
+                                <div key={`${iface.name}-${iface.address}-${idx}`} className="text-xs" style={{ color: "#cbd5e1" }}>
+                                  <strong>{iface.name}</strong> · {iface.address} · {iface.family} {iface.internal ? "· internal" : ""}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No network interfaces detected.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeSection === "settings" && (
               <div className="max-w-2xl mx-auto p-8">
                 <div className="space-y-6">
@@ -4007,12 +4113,9 @@ function Flow() {
             {activeSection === "profile" && (
               <div className="max-w-xl mx-auto p-8">
                 {(() => {
-                  const profileName =
-                    authProfile?.fullName ||
-                    activeUser?.user_metadata?.full_name ||
-                    (activeUser?.email ? activeUser.email.split("@")[0] : "User");
-                  const profileEmail = activeUser?.email || "user@example.com";
-                  const profileOrganization = authProfile?.organization || "Not set";
+                  const profileName = "Local User";
+                  const profileEmail = "local@device";
+                  const profileOrganization = "Local";
                   return (
                     <>
                 <div className="flex items-center gap-5 mb-8">
@@ -4056,7 +4159,7 @@ function Flow() {
                   );
                 })()}
                 <button
-                  onClick={handleCloseWorkspace}
+                  onClick={handleSignOut}
                   className="mt-8 w-full active:scale-95 transition-transform"
                   style={{
                     ...glassButtonBase, justifyContent: 'center', width: '100%', padding: '12px',
@@ -4081,13 +4184,16 @@ function Flow() {
                     style={{ background: 'var(--primary-dim)', border: '1px solid var(--primary-glow)', color: 'var(--primary-strong)' }}>PREM</span>
                   <span style={{
                     display: 'block', padding: '6px 16px', borderRadius: '2px',
-                    background: 'var(--primary-dim)', border: '1px solid var(--primary-glow)',
+                    background: 'var(--primary-dim)',
+                    border: '1px solid var(--primary-glow)',
                     color: 'var(--primary)', fontSize: '11px', fontWeight: 700,
                     textTransform: 'uppercase', letterSpacing: '0.1em'
                   }}>
                     STANDARD_LICENSE_ACTIVE
                   </span>
-                  <p className="text-[9px] mt-3 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Professional engineering tier enabled.</p>
+                  <p className="text-[9px] mt-3 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                    Professional engineering tier enabled.
+                  </p>
                 </div>
               </div>
             )}
@@ -4161,9 +4267,67 @@ function Flow() {
 }
 
 export default function App() {
+  const [isStarted, setIsStarted] = useState(false);
+
+  const handleLaunchWorkspace = () => {
+    setIsStarted(true);
+  };
+
+  const handleExitWorkspace = () => {
+    setIsStarted(false);
+  };
+
+  if (!isStarted) {
+    const fallbackLanding = (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#050b13] text-white">
+        <div className="text-2xl font-black mb-4">TatvaLabz</div>
+        <div className="text-sm text-[#9fb3c8] mb-6">Landing page failed to render. Click below to enter workspace.</div>
+        <button
+          onClick={handleLaunchWorkspace}
+          className="px-6 py-3 rounded-md bg-[#0ea5e9] text-white font-bold uppercase text-xs tracking-widest"
+        >
+          Launch Workspace
+        </button>
+      </div>
+    );
+    return (
+      <LandingErrorBoundary fallback={fallbackLanding}>
+        <LandingPage onStart={handleLaunchWorkspace} />
+      </LandingErrorBoundary>
+    );
+  }
+
+  const workspaceFallback = (error) => (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#050b13] text-white">
+      <div className="text-2xl font-black mb-4">TatvaLabz</div>
+      <div className="text-sm text-[#9fb3c8] mb-6">Workspace failed to render. Retry or return to landing.</div>
+      {error && (
+        <div className="max-w-xl text-xs text-[#8fb4de] bg-[#0b1220] border border-[#1f2a3d] px-4 py-3 rounded-md mb-6">
+          {String(error?.message || error)}
+        </div>
+      )}
+      <div className="flex gap-3">
+        <button
+          onClick={handleLaunchWorkspace}
+          className="px-6 py-3 rounded-md bg-[#0ea5e9] text-white font-bold uppercase text-xs tracking-widest"
+        >
+          Retry Launch
+        </button>
+        <button
+          onClick={handleExitWorkspace}
+          className="px-6 py-3 rounded-md bg-transparent border border-[#2a3b52] text-[#cbd5e1] font-bold uppercase text-xs tracking-widest"
+        >
+          Back to Landing
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <ReactFlowProvider>
-      <Flow />
-    </ReactFlowProvider>
+    <WorkspaceErrorBoundary fallback={workspaceFallback}>
+      <ReactFlowProvider>
+        <Flow isStarted={isStarted} onExit={handleExitWorkspace} />
+      </ReactFlowProvider>
+    </WorkspaceErrorBoundary>
   );
 }
