@@ -242,6 +242,13 @@ function Flow({ isStarted, onExit }) {
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState(null);
   const [devicesTab, setDevicesTab] = useState("serial");
+  const [agentUrl, setAgentUrl] = useState(() => {
+    try {
+      return localStorage.getItem("tatvalabz_agent_url") || "http://127.0.0.1:8787";
+    } catch {
+      return "http://127.0.0.1:8787";
+    }
+  });
   const [executionRecords, setExecutionRecords] = useState([]);
   const [activeCalculationPreview, setActiveCalculationPreview] = useState(null);
   const [selectedCalculationByProject, setSelectedCalculationByProject] = useState({});
@@ -1104,7 +1111,8 @@ function Flow({ isStarted, onExit }) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch("http://127.0.0.1:8787/devices", { signal: controller.signal });
+      const baseUrl = (agentUrl || "").replace(/\/+$/, "");
+      const res = await fetch(`${baseUrl}/devices`, { signal: controller.signal });
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`Agent error ${res.status}`);
       const data = await res.json();
@@ -1115,7 +1123,7 @@ function Flow({ isStarted, onExit }) {
     } finally {
       setDevicesLoading(false);
     }
-  }, []);
+  }, [agentUrl]);
 
   useEffect(() => {
     if (activeSection === "external_devices") {
@@ -3968,6 +3976,48 @@ function Flow({ isStarted, onExit }) {
                       </a>
                     </div>
                   </div>
+                </div>
+
+                <div className="p-4 rounded-sm mb-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border-technical)" }}>
+                  <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>
+                    Agent URL
+                  </div>
+                  <p className="text-[11px] mt-1" style={{ color: "#94a3b8" }}>
+                    Use a public HTTPS URL if you are on the hosted webapp. Localhost will only work when the webapp runs on the same machine.
+                  </p>
+                  <div className="mt-3 flex flex-col md:flex-row gap-2">
+                    <input
+                      value={agentUrl}
+                      onChange={(e) => setAgentUrl(e.target.value)}
+                      placeholder="http://127.0.0.1:8787"
+                      className="flex-1 px-3 py-2 rounded-sm text-[11px]"
+                      style={{
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border-technical)",
+                        color: "var(--text-primary)",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        try {
+                          localStorage.setItem("tatvalabz_agent_url", agentUrl);
+                        } catch {
+                          // Ignore localStorage failures.
+                        }
+                        fetchExternalDevices();
+                      }}
+                      className="px-3 py-2 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+                      style={{ background: "rgba(34, 211, 238, 0.12)", border: "1px solid rgba(34, 211, 238, 0.4)", color: "#67e8f9" }}
+                    >
+                      Save & Refresh
+                    </button>
+                  </div>
+                  {typeof window !== "undefined" && window.location?.protocol === "https:" && agentUrl?.startsWith("http://") && (
+                    <div className="mt-2 text-[10px]" style={{ color: "#f59e0b" }}>
+                      Hosted pages block HTTP agent URLs. Use HTTPS (for example a tunnel) for remote access.
+                    </div>
+                  )}
                 </div>
 
                 {devicesLoading && (
