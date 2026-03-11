@@ -1146,7 +1146,7 @@ function Flow({ isStarted, onExit }) {
     setDevicesLoading(true);
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), 12000);
       const rawUrl = (agentUrl || "").trim() || (() => {
         try {
           return localStorage.getItem("tatvalabz_agent_url") || "";
@@ -1168,7 +1168,11 @@ function Flow({ isStarted, onExit }) {
       setExternalDevices(data);
     } catch (err) {
       setExternalDevices(null);
-      setDevicesError(err?.message || "Agent not reachable");
+      if (err?.name === "AbortError") {
+        setDevicesError("Agent request timed out. Check tunnel and try again.");
+      } else {
+        setDevicesError(err?.message || "Agent not reachable");
+      }
     } finally {
       setDevicesLoading(false);
     }
