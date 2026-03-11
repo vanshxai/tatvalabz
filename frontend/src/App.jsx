@@ -4090,7 +4090,75 @@ function Flow({ isStarted, onExit }) {
                       {devicesTab === "usb" && (
                         <>
                           <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>USB</h3>
-                          {externalDevices.usb?.length ? (
+                          {externalDevices.usbDetails ? (
+                            <div className="space-y-4">
+                              <div>
+                                <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>
+                                  External Devices
+                                </div>
+                                {externalDevices.usbDetails.external?.length ? (
+                                  <ul className="text-xs mt-2" style={{ color: "#cbd5e1" }}>
+                                    {externalDevices.usbDetails.external.map((usb, idx) => (
+                                      <li key={`ext-${usb.name}-${idx}`}>
+                                        {usb.name}
+                                        {usb.vendor ? ` · ${usb.vendor}` : ""}{usb.product ? ` · ${usb.product}` : ""}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>No external USB devices detected.</p>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>
+                                  Internal Devices
+                                </div>
+                                {externalDevices.usbDetails.internal?.length ? (
+                                  <ul className="text-xs mt-2" style={{ color: "#cbd5e1" }}>
+                                    {externalDevices.usbDetails.internal.map((usb, idx) => (
+                                      <li key={`int-${usb.name}-${idx}`}>
+                                        {usb.name}
+                                        {usb.vendor ? ` · ${usb.vendor}` : ""}{usb.product ? ` · ${usb.product}` : ""}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>No internal USB devices detected.</p>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>
+                                  USB Controllers
+                                </div>
+                                {externalDevices.usbDetails.controllers?.length ? (
+                                  <div className="mt-2 space-y-2 text-xs" style={{ color: "#cbd5e1" }}>
+                                    {externalDevices.usbDetails.controllers.map((ctl, idx) => (
+                                      <div key={`ctl-${ctl.name}-${idx}`}>
+                                        <strong>{ctl.name}</strong>
+                                        {ctl.speed ? ` · ${ctl.speed}` : ""}
+                                        {ctl.devices?.length ? (
+                                          <div className="ml-3 mt-1 space-y-1">
+                                            {ctl.devices.map((dev, didx) => (
+                                              <div key={`ctl-dev-${dev.name}-${didx}`}>
+                                                {dev.name}
+                                                {dev.vendor ? ` · ${dev.vendor}` : ""}{dev.product ? ` · ${dev.product}` : ""}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="ml-3 mt-1 text-[10px]" style={{ color: "#94a3b8" }}>No devices listed.</div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>No USB controller data.</p>
+                                )}
+                              </div>
+                            </div>
+                          ) : externalDevices.usb?.length ? (
                             <ul className="text-xs" style={{ color: "#cbd5e1" }}>
                               {externalDevices.usb.map((usb, idx) => (
                                 <li key={`${usb}-${idx}`}>{usb}</li>
