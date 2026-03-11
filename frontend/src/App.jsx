@@ -165,6 +165,42 @@ const getSweepRunCountFromResult = (result) => {
   return 0;
 };
 
+const humanizeSerialPort = (port) => {
+  const lower = (port || "").toLowerCase();
+  if (lower.includes("bluetooth")) return "Bluetooth Modem";
+  if (lower.includes("blth")) return "Bluetooth";
+  if (lower.includes("incoming")) return "Bluetooth Incoming";
+  if (lower.includes("usb")) return "USB Serial";
+  if (lower.includes("wch")) return "USB Serial (WCH)";
+  if (lower.includes("slab")) return "USB Serial (Silicon Labs)";
+  return "Serial Port";
+};
+
+const humanizeUsbName = (entry) => {
+  const name = entry?.name || "";
+  const vendor = (entry?.vendor || "").toLowerCase();
+  const lower = name.toLowerCase();
+  if (lower.includes("t2")) return "Apple T2 Security Chip";
+  if (lower.includes("keyboard") || lower.includes("trackpad")) return "Built-in Keyboard/Trackpad";
+  if (lower.includes("camera")) return "Built-in Camera";
+  if (lower.includes("touch bar")) return "Touch Bar";
+  if (lower.includes("ambient light")) return "Ambient Light Sensor";
+  if (lower.includes("headset")) return "Audio Headset";
+  if (vendor.includes("apple")) return `Apple Device (${name})`;
+  if (lower.includes("hub")) return "USB Hub";
+  return name || "USB Device";
+};
+
+const humanizeNetwork = (iface) => {
+  const name = iface?.name || "";
+  if (name === "lo0") return "Loopback";
+  if (name.startsWith("en")) return "Wi‑Fi / Ethernet";
+  if (name.startsWith("awdl")) return "Apple Wireless Direct Link";
+  if (name.startsWith("llw")) return "Low‑Latency Wi‑Fi";
+  if (name.startsWith("utun")) return "VPN / Tunnel";
+  return "Network Interface";
+};
+
 
 const resolveNodeInputAutofillValue = (node, inputName) => {
   if (!node || !inputName) return null;
@@ -4076,11 +4112,15 @@ function Flow({ isStarted, onExit }) {
                         <>
                           <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Serial</h3>
                           {externalDevices.serial?.length ? (
-                            <ul className="text-xs" style={{ color: "#cbd5e1" }}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {externalDevices.serial.map((port) => (
-                                <li key={port}>{port}</li>
+                                <div key={port} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Serial Port</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{humanizeSerialPort(port)}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>{port}</div>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           ) : (
                             <p className="text-xs" style={{ color: "#94a3b8" }}>No serial devices detected.</p>
                           )}
@@ -4097,14 +4137,22 @@ function Flow({ isStarted, onExit }) {
                                   External Devices
                                 </div>
                                 {externalDevices.usbDetails.external?.length ? (
-                                  <ul className="text-xs mt-2" style={{ color: "#cbd5e1" }}>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                                     {externalDevices.usbDetails.external.map((usb, idx) => (
-                                      <li key={`ext-${usb.name}-${idx}`}>
-                                        {usb.name}
-                                        {usb.vendor ? ` · ${usb.vendor}` : ""}{usb.product ? ` · ${usb.product}` : ""}
-                                      </li>
+                                      <div key={`ext-${usb.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                        <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>External USB</div>
+                                        <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{humanizeUsbName(usb)}</div>
+                                        <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                          {usb.vendor ? `${usb.vendor}` : "Unknown Vendor"}
+                                          {usb.product ? ` · ${usb.product}` : ""}
+                                        </div>
+                                        <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                          {usb.speed ? `Speed: ${usb.speed}` : ""}
+                                          {usb.location ? ` · Location: ${usb.location}` : ""}
+                                        </div>
+                                      </div>
                                     ))}
-                                  </ul>
+                                  </div>
                                 ) : (
                                   <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>No external USB devices detected.</p>
                                 )}
@@ -4115,14 +4163,22 @@ function Flow({ isStarted, onExit }) {
                                   Internal Devices
                                 </div>
                                 {externalDevices.usbDetails.internal?.length ? (
-                                  <ul className="text-xs mt-2" style={{ color: "#cbd5e1" }}>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                                     {externalDevices.usbDetails.internal.map((usb, idx) => (
-                                      <li key={`int-${usb.name}-${idx}`}>
-                                        {usb.name}
-                                        {usb.vendor ? ` · ${usb.vendor}` : ""}{usb.product ? ` · ${usb.product}` : ""}
-                                      </li>
+                                      <div key={`int-${usb.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                        <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Internal USB</div>
+                                        <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{humanizeUsbName(usb)}</div>
+                                        <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                          {usb.vendor ? `${usb.vendor}` : "Apple"}
+                                          {usb.product ? ` · ${usb.product}` : ""}
+                                        </div>
+                                        <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                          {usb.speed ? `Speed: ${usb.speed}` : ""}
+                                          {usb.location ? ` · Location: ${usb.location}` : ""}
+                                        </div>
+                                      </div>
                                     ))}
-                                  </ul>
+                                  </div>
                                 ) : (
                                   <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>No internal USB devices detected.</p>
                                 )}
@@ -4133,22 +4189,23 @@ function Flow({ isStarted, onExit }) {
                                   USB Controllers
                                 </div>
                                 {externalDevices.usbDetails.controllers?.length ? (
-                                  <div className="mt-2 space-y-2 text-xs" style={{ color: "#cbd5e1" }}>
+                                  <div className="mt-2 space-y-3 text-xs" style={{ color: "#cbd5e1" }}>
                                     {externalDevices.usbDetails.controllers.map((ctl, idx) => (
-                                      <div key={`ctl-${ctl.name}-${idx}`}>
-                                        <strong>{ctl.name}</strong>
-                                        {ctl.speed ? ` · ${ctl.speed}` : ""}
+                                      <div key={`ctl-${ctl.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                        <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>USB Controller</div>
+                                        <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{ctl.name || "USB Controller"}</div>
+                                        <div className="text-[10px]" style={{ color: "#6b7fa0" }}>{ctl.speed ? `Speed: ${ctl.speed}` : "Speed: —"}</div>
                                         {ctl.devices?.length ? (
-                                          <div className="ml-3 mt-1 space-y-1">
+                                          <div className="mt-2 space-y-1">
                                             {ctl.devices.map((dev, didx) => (
-                                              <div key={`ctl-dev-${dev.name}-${didx}`}>
-                                                {dev.name}
+                                              <div key={`ctl-dev-${dev.name}-${didx}`} className="text-[11px]" style={{ color: "#cbd5e1" }}>
+                                                {humanizeUsbName(dev)}
                                                 {dev.vendor ? ` · ${dev.vendor}` : ""}{dev.product ? ` · ${dev.product}` : ""}
                                               </div>
                                             ))}
                                           </div>
                                         ) : (
-                                          <div className="ml-3 mt-1 text-[10px]" style={{ color: "#94a3b8" }}>No devices listed.</div>
+                                          <div className="mt-2 text-[10px]" style={{ color: "#94a3b8" }}>No devices listed.</div>
                                         )}
                                       </div>
                                     ))}
@@ -4174,10 +4231,15 @@ function Flow({ isStarted, onExit }) {
                         <>
                           <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Network</h3>
                           {externalDevices.network?.length ? (
-                            <div className="space-y-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {externalDevices.network.map((iface, idx) => (
-                                <div key={`${iface.name}-${iface.address}-${idx}`} className="text-xs" style={{ color: "#cbd5e1" }}>
-                                  <strong>{iface.name}</strong> · {iface.address} · {iface.family} {iface.internal ? "· internal" : ""}
+                                <div key={`${iface.name}-${iface.address}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Network</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{humanizeNetwork(iface)} · {iface.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>{iface.address}</div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {iface.family} {iface.internal ? "· internal" : ""}
+                                  </div>
                                 </div>
                               ))}
                             </div>
