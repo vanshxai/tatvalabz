@@ -1147,7 +1147,20 @@ function Flow({ isStarted, onExit }) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
-      const baseUrl = (agentUrl || "").replace(/\/+$/, "");
+      const rawUrl = (agentUrl || "").trim() || (() => {
+        try {
+          return localStorage.getItem("tatvalabz_agent_url") || "";
+        } catch {
+          return "";
+        }
+      })();
+      const baseUrl = rawUrl.replace(/\/+$/, "");
+      if (!baseUrl) {
+        throw new Error("Agent URL missing. Paste the tunnel URL and click Save & Refresh.");
+      }
+      if (!/^https?:\/\//i.test(baseUrl)) {
+        throw new Error("Agent URL must start with http:// or https://");
+      }
       const res = await fetch(`${baseUrl}/devices`, { signal: controller.signal });
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`Agent error ${res.status}`);
@@ -4037,7 +4050,9 @@ function Flow({ isStarted, onExit }) {
                     <button
                       onClick={() => {
                         try {
-                          localStorage.setItem("tatvalabz_agent_url", agentUrl);
+                          const trimmed = (agentUrl || "").trim();
+                          localStorage.setItem("tatvalabz_agent_url", trimmed);
+                          setAgentUrl(trimmed);
                         } catch {
                           // Ignore localStorage failures.
                         }
