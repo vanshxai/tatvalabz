@@ -249,6 +249,13 @@ function Flow({ isStarted, onExit }) {
       return "http://127.0.0.1:8787";
     }
   });
+  const [agentToken, setAgentToken] = useState(() => {
+    try {
+      return localStorage.getItem("tatvalabz_agent_token") || "";
+    } catch {
+      return "";
+    }
+  });
   const [executionRecords, setExecutionRecords] = useState([]);
   const [activeCalculationPreview, setActiveCalculationPreview] = useState(null);
   const [selectedCalculationByProject, setSelectedCalculationByProject] = useState({});
@@ -1112,7 +1119,8 @@ function Flow({ isStarted, onExit }) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
       const baseUrl = (agentUrl || "").replace(/\/+$/, "");
-      const res = await fetch(`${baseUrl}/devices`, { signal: controller.signal });
+      const headers = agentToken ? { Authorization: `Bearer ${agentToken}` } : {};
+      const res = await fetch(`${baseUrl}/devices`, { signal: controller.signal, headers });
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`Agent error ${res.status}`);
       const data = await res.json();
@@ -1123,7 +1131,7 @@ function Flow({ isStarted, onExit }) {
     } finally {
       setDevicesLoading(false);
     }
-  }, [agentUrl]);
+  }, [agentUrl, agentToken]);
 
   useEffect(() => {
     if (activeSection === "external_devices") {
@@ -4018,6 +4026,43 @@ function Flow({ isStarted, onExit }) {
                       Hosted pages block HTTP agent URLs. Use HTTPS (for example a tunnel) for remote access.
                     </div>
                   )}
+                </div>
+
+                <div className="p-4 rounded-sm mb-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border-technical)" }}>
+                  <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>
+                    Agent Token
+                  </div>
+                  <p className="text-[11px] mt-1" style={{ color: "#94a3b8" }}>
+                    Set `AGENT_API_TOKEN` in the agent process and paste it here.
+                  </p>
+                  <div className="mt-3 flex flex-col md:flex-row gap-2">
+                    <input
+                      value={agentToken}
+                      onChange={(e) => setAgentToken(e.target.value)}
+                      placeholder="paste token"
+                      className="flex-1 px-3 py-2 rounded-sm text-[11px]"
+                      style={{
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border-technical)",
+                        color: "var(--text-primary)",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        try {
+                          localStorage.setItem("tatvalabz_agent_token", agentToken);
+                        } catch {
+                          // Ignore localStorage failures.
+                        }
+                        fetchExternalDevices();
+                      }}
+                      className="px-3 py-2 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+                      style={{ background: "rgba(34, 211, 238, 0.12)", border: "1px solid rgba(34, 211, 238, 0.4)", color: "#67e8f9" }}
+                    >
+                      Save & Refresh
+                    </button>
+                  </div>
                 </div>
 
                 {devicesLoading && (
