@@ -4092,6 +4092,15 @@ function Flow({ isStarted, onExit }) {
                           { id: "serial", label: "Serial" },
                           { id: "usb", label: "USB" },
                           { id: "network", label: "Network" },
+                          { id: "wifi", label: "Wi‑Fi" },
+                          { id: "bluetooth", label: "Bluetooth" },
+                          { id: "power", label: "Power" },
+                          { id: "audio", label: "Audio" },
+                          { id: "displays", label: "Displays" },
+                          { id: "storage", label: "Storage" },
+                          { id: "cameras", label: "Cameras" },
+                          { id: "midi", label: "MIDI" },
+                          { id: "thunderbolt", label: "Thunderbolt" },
                         ].map((tab) => (
                           <button
                             key={tab.id}
@@ -4245,6 +4254,219 @@ function Flow({ isStarted, onExit }) {
                             </div>
                           ) : (
                             <p className="text-xs" style={{ color: "#94a3b8" }}>No network interfaces detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "wifi" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Wi‑Fi</h3>
+                          {externalDevices.wifi?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.wifi.map((wifi, idx) => (
+                                <div key={`wifi-${wifi.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Wi‑Fi Network</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{wifi.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {wifi.security ? `Security: ${wifi.security}` : "Security: —"}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {wifi.txRate ? `Tx Rate: ${wifi.txRate}` : ""}
+                                    {wifi.channel ? ` · Channel: ${wifi.channel}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No Wi‑Fi details detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "bluetooth" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Bluetooth</h3>
+                          {externalDevices.bluetooth?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.bluetooth.map((bt, idx) => (
+                                <div key={`bt-${bt.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Bluetooth Device</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{bt.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {bt.connected ? "Connected" : "Not Connected"} {bt.type ? `· ${bt.type}` : ""}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {bt.manufacturer ? `Maker: ${bt.manufacturer}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No Bluetooth devices detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "power" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Power</h3>
+                          {externalDevices.power?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.power.map((pwr, idx) => (
+                                <div key={`pwr-${pwr.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Power</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{pwr.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {pwr.charging ? "Charging" : "Not Charging"} {pwr.charge ? `· ${pwr.charge}` : ""}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {pwr.wattage ? `Wattage: ${pwr.wattage}` : ""}
+                                    {pwr.health ? ` · Health: ${pwr.health}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No power details detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "audio" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Audio</h3>
+                          {externalDevices.audio?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.audio.map((aud, idx) => (
+                                <div key={`aud-${aud.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Audio Device</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{aud.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {aud.output ? "Output" : ""} {aud.input ? "Input" : ""} {aud.transport ? `· ${aud.transport}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No audio devices detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "displays" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Displays</h3>
+                          {externalDevices.displays?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.displays.map((disp, idx) => (
+                                <div key={`disp-${disp.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Display</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{disp.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {disp.resolution ? `Resolution: ${disp.resolution}` : "Resolution: —"}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {disp.refresh ? `Refresh: ${disp.refresh}` : ""}
+                                    {disp.connection ? ` · ${disp.connection}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No displays detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "storage" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Storage</h3>
+                          {externalDevices.storage?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.storage.map((stor, idx) => (
+                                <div key={`stor-${stor.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Storage</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{stor.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {stor.size ? `Size: ${stor.size}` : "Size: —"} {stor.type ? `· ${stor.type}` : ""}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {stor.mount ? `Mount: ${stor.mount}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No storage devices detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "cameras" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Cameras</h3>
+                          {externalDevices.cameras?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.cameras.map((cam, idx) => (
+                                <div key={`cam-${cam.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Camera</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{cam.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {cam.model ? `Model: ${cam.model}` : "Model: —"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No cameras detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "midi" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>MIDI</h3>
+                          {externalDevices.midi?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.midi.map((midi, idx) => (
+                                <div key={`midi-${midi.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>MIDI Device</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{midi.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {midi.manufacturer ? `Maker: ${midi.manufacturer}` : "Maker: —"}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {midi.transport ? `Transport: ${midi.transport}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No MIDI devices detected.</p>
+                          )}
+                        </>
+                      )}
+
+                      {devicesTab === "thunderbolt" && (
+                        <>
+                          <h3 className="text-sm font-bold mb-2" style={{ color: "#e2e8f0" }}>Thunderbolt</h3>
+                          {externalDevices.thunderbolt?.length ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {externalDevices.thunderbolt.map((tb, idx) => (
+                                <div key={`tb-${tb.name}-${idx}`} className="p-3 rounded-sm" style={{ background: "rgba(15,23,42,0.6)", border: "1px solid var(--border-technical)" }}>
+                                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#8fb4de" }}>Thunderbolt</div>
+                                  <div className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>{tb.name}</div>
+                                  <div className="text-[11px]" style={{ color: "#94a3b8" }}>
+                                    {tb.vendor ? `Vendor: ${tb.vendor}` : "Vendor: —"}
+                                  </div>
+                                  <div className="text-[10px]" style={{ color: "#6b7fa0" }}>
+                                    {tb.device ? `Device: ${tb.device}` : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "#94a3b8" }}>No Thunderbolt devices detected.</p>
                           )}
                         </>
                       )}
